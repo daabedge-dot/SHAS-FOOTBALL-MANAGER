@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+  <title>SHAS FC Manager</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:#0a0e1a;font-family:'DM Sans','Segoe UI',sans-serif;color:#e8eaf0;}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:rgba(255,255,255,0.1);outline:none;}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#4ade80;cursor:pointer;}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1) opacity(0.4);}
+    ::-webkit-scrollbar{display:none;}
+    select option{background:#1a2235!important;color:#fff!important;}
+    @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 6px #4ade80}50%{opacity:.4;box-shadow:0 0 2px #4ade80}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+<div id="root">
+  <div style="min-height:100vh;background:#0a0e1a;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:#4ade80;font-family:sans-serif;">
+    <div style="font-size:48px">⚽</div>
+    <div style="font-size:16px;font-weight:700">SHAS FC Loading...</div>
+    <div style="font-size:12px;color:#6b7280">Connecting...</div>
+  </div>
+</div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script>
+  try {
+    firebase.initializeApp({
+      apiKey:"AIzaSyA1C0W4W9vQDDrOQVSJX-4wFpch1pA3Fco",
+      authDomain:"shas-football-manager.firebaseapp.com",
+      databaseURL:"https://shas-football-manager-default-rtdb.firebaseio.com",
+      projectId:"shas-football-manager",
+      storageBucket:"shas-football-manager.firebasestorage.app",
+      messagingSenderId:"173430651990",
+      appId:"1:173430651990:web:48750d164c75231bc24ff7"
+    });
+    window._fbDb = firebase.database();
+    window._fbReady = true;
+  } catch(e){ window._fbReady=false; window._fbError=e.message; }
+</script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, Component } = React;
+
+// ── Error Boundary ─────────────────────────────────────────────────────
+class ErrorBoundary extends Component {
+  constructor(p){super(p);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(e){return{hasError:true,error:e};}
+  render(){
+    if(!this.state.hasError)return this.props.children;
+    return(
+      <div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div style={{background:"#111827",border:"1px solid rgba(239,68,68,0.3)",borderRadius:16,padding:28,maxWidth:440,width:"100%"}}>
+          <div style={{fontSize:36,marginBottom:12}}>⚠️</div>
+          <div style={{fontSize:18,fontWeight:800,color:"#f87171",marginBottom:8}}>App Error</div>
+          <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:12,marginBottom:16,fontFamily:"monospace",fontSize:11,color:"#f87171",wordBreak:"break-all"}}>{this.state.error?.message}</div>
+          <button onClick={()=>window.location.reload()} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1d4ed8,#60a5fa)",color:"#fff",fontWeight:800,cursor:"pointer",fontSize:13}}>🔄 Reload</button>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ── Constants ──────────────────────────────────────────────────────────
+const BANK={name:"YOUR CLUB NAME",bank:"YOUR BANK NAME",bankCode:"000",account:"0000000000",ref:"TRAINING-FEE"};
+const SESSION_TYPES=["Wednesday","Friday","Saturday","Birthday","Match"];
+const SESSION_FEES={Wednesday:200,Friday:200,Saturday:200,Birthday:5000,Match:3000};
+const CARD_FINE={yellow:200,red:500};
+const LATE_FEE=100;
+const N=v=>"₦"+Number(v).toLocaleString();
+const fmt=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const EXP_CATS_TRAINING=["Pitch Hire","Referee","Bibs & Equipment","First Aid","Admin","Other"];
+const EXP_CATS_DONATION=["Club Kit","Trophies & Awards","Club Events","Facility Upgrade","Medical","Donation Other"];
+
+const iS={width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"9px 12px",color:"#fff",fontSize:13,boxSizing:"border-box"};
+const sS={...iS,appearance:"none",backgroundColor:"#1a2235",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 10px center",paddingRight:28};
+
+const Lbl=({c,children})=><div style={{fontSize:10,color:c||"#6b7280",marginBottom:4,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px"}}>{children}</div>;
+const SecHead=({color="#6b7280",children,badge})=>(
+  <div style={{fontSize:13,fontWeight:700,color,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+    {children}
+    {badge!==undefined&&<span style={{background:color+"22",color,borderRadius:6,padding:"2px 9px",fontSize:12}}>{badge}</span>}
+  </div>
+);
+
+// Account summary card
+const AccCard=({title,icon,color,income,expenses,badge})=>{
+  const bal=income-expenses;
+  return(
+    <div style={{background:`rgba(${color},0.07)`,border:`1px solid rgba(${color},0.25)`,borderRadius:14,padding:16,marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:800,color:`rgb(${color})`}}>{icon} {title}</div>
+        {badge&&<span style={{fontSize:10,background:`rgba(${color},0.15)`,color:`rgb(${color})`,borderRadius:10,padding:"2px 8px",fontWeight:700}}>{badge}</span>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <div style={{background:"rgba(74,222,128,0.08)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#4ade80"}}>{N(income)}</div>
+          <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>Income</div>
+        </div>
+        <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#f87171"}}>{N(expenses)}</div>
+          <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>Expenses</div>
+        </div>
+        <div style={{background:bal>=0?"rgba(74,222,128,0.08)":"rgba(239,68,68,0.08)",border:`1px solid ${bal>=0?"rgba(74,222,128,0.25)":"rgba(239,68,68,0.25)"}`,borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+          <div style={{fontSize:13,fontWeight:800,color:bal>=0?"#4ade80":"#f87171"}}>{N(bal)}</div>
+          <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>Balance</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const toArr=v=>{if(!v)return[];const a=Array.isArray(v)?v:Object.values(v);return a.filter(x=>x!=null);};
+
+// ── ADMIN LOGIN SCREEN ─────────────────────────────────────────────────
+function LoginScreen({onLogin}){
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const login=async()=>{
+    if(!email||!pass)return;
+    setLoading(true);setErr("");
+    try{
+      await firebase.auth().signInWithEmailAndPassword(email,pass);
+      onLogin();
+    }catch(e){
+      setErr("Incorrect email or password");
+    }finally{setLoading(false);}
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{width:"100%",maxWidth:380}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{width:80,height:80,borderRadius:20,background:"linear-gradient(135deg,#065f46,#4ade80)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,margin:"0 auto 16px"}}>⚽</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#fbbf24"}}>SHAS FC Manager</div>
+          <div style={{fontSize:12,color:"#6b7280",marginTop:4}}>Admin Access Only</div>
+        </div>
+        <div style={{background:"#111827",border:"1px solid rgba(255,255,255,0.1)",borderRadius:16,padding:24}}>
+          <div style={{marginBottom:14}}>
+            <Lbl>Email</Lbl>
+            <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@email.com" style={iS} type="email" autoComplete="email" onKeyDown={e=>e.key==="Enter"&&login()}/>
+          </div>
+          <div style={{marginBottom:20}}>
+            <Lbl>Password</Lbl>
+            <input value={pass} onChange={e=>setPass(e.target.value)} placeholder="Password" style={iS} type="password" autoComplete="current-password" onKeyDown={e=>e.key==="Enter"&&login()}/>
+          </div>
+          {err&&<div style={{fontSize:12,color:"#f87171",marginBottom:14,padding:"8px 12px",background:"rgba(239,68,68,0.1)",borderRadius:8}}>❌ {err}</div>}
+          <button onClick={login} disabled={loading||!email||!pass} style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:email&&pass?"linear-gradient(135deg,#1d4ed8,#60a5fa)":"rgba(255,255,255,0.06)",color:email&&pass?"#fff":"#4b5563",fontWeight:800,cursor:email&&pass?"pointer":"not-allowed",fontSize:14}}>
+            {loading?"Signing in...":"🔐 Sign In"}
+          </button>
+        </div>
+        <div style={{textAlign:"center",marginTop:16,fontSize:11,color:"#374151"}}>
+          State Housing All Stars FC · Calabar, Nigeria
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ────────────────────────────────────────────────────────────
+function App(){
+  const today=new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
+
+  // Auth state
+  const [isAdmin,setIsAdmin]=useState(false);
+  const [isDev,setIsDev]=useState(false);
+  const [authChecked,setAuthChecked]=useState(false);
+
+  // Session
+  const [tab,setTab]=useState("session");
+  const [sessionType,setSessionType]=useState("Wednesday");
+  const [sessionDate,setSessionDate]=useState(new Date().toISOString().slice(0,10));
+
+  // Set timer
+  const [setDuration,setSetDuration]=useState(15);
+  const [swSecs,setSwSecs]=useState(0);
+  const [swOn,setSwOn]=useState(false);
+  const [swFinished,setSwFinished]=useState(false);
+  const [teamA,setTeamA]=useState("Set 1");
+  const [teamB,setTeamB]=useState("Set 2");
+  const [showPK,setShowPK]=useState(false);
+  const [setLog,setSetLog]=useState([]);
+  const swRef=useRef(null);
+
+  // Members & squad
+  const [members,setMembers]=useState([]);
+  const [mName,setMName]=useState("");
+  const [showMForm,setShowMForm]=useState(false);
+  const [players,setPlayers]=useState([]);
+  const [pName,setPName]=useState("");
+  const [showPForm,setShowPForm]=useState(false);
+  const [playerSets,setPlayerSets]=useState({});
+
+  // Match
+  const [goals,setGoals]=useState([]);
+  const [gScorer,setGScorer]=useState("");
+  const [gAssist,setGAssist]=useState("");
+  const [cards,setCards]=useState([]);
+  const [cName,setCName]=useState("");
+  const [cType,setCType]=useState("yellow");
+
+  // Payments
+  const [txns,setTxns]=useState([]);
+  const [payModal,setPayModal]=useState(null);
+  const [copiedField,setCopied]=useState(null);
+  const [showGroupForm,setShowGroupForm]=useState(false);
+  const [groupPayer,setGroupPayer]=useState("");
+  const [groupCovered,setGroupCovered]=useState([]);
+  const [groupMethod,setGroupMethod]=useState("cash");
+  const [showLateForm,setShowLateForm]=useState(false);
+  const [latePlayer,setLatePlayer]=useState("");
+  const [lateMethod,setLateMethod]=useState("cash");
+
+  // ── TRAINING EXPENSES ─────────────────────────────────────────────
+  const [trainingExpenses,setTrainingExpenses]=useState([]);
+  const [txDesc,setTxDesc]=useState("");
+  const [txAmt,setTxAmt]=useState("");
+  const [txCat,setTxCat]=useState("Pitch Hire");
+  const [txDate,setTxDate]=useState(new Date().toISOString().slice(0,10));
+  const [showTxForm,setShowTxForm]=useState(false);
+
+  // ── DONATION ACCOUNT ──────────────────────────────────────────────
+  const [donors,setDonors]=useState([]);
+  const [donations,setDonations]=useState({});
+  const [donorName,setDonorName]=useState("");
+  const [showDonorForm,setShowDonorForm]=useState(false);
+  const [donYear,setDonYear]=useState(new Date().getFullYear());
+  const [editingCell,setEditingCell]=useState(null);
+  const [cellValue,setCellValue]=useState("");
+
+  // ── DONATION EXPENSES ─────────────────────────────────────────────
+  const [donationExpenses,setDonationExpenses]=useState([]);
+  const [dxDesc,setDxDesc]=useState("");
+  const [dxAmt,setDxAmt]=useState("");
+  const [dxCat,setDxCat]=useState("Club Kit");
+  const [dxDate,setDxDate]=useState(new Date().toISOString().slice(0,10));
+  const [showDxForm,setShowDxForm]=useState(false);
+
+  // Notes
+  const [sessionNote,setSessionNote]=useState("");
+  const [pNotes,setPNotes]=useState({});
+
+  // History
+  const [sessionHistory,setSessionHistory]=useState([]);
+  const [ledger,setLedger]=useState([]);
+  const [expandedRows,setExpandedRows]=useState({});
+  const [manualGoal,setManualGoal]=useState(false);
+  const [manualGoalDate,setManualGoalDate]=useState(new Date().toISOString().slice(0,10));
+  const [manualCard,setManualCard]=useState(false);
+  const [manualCardDate,setManualCardDate]=useState(new Date().toISOString().slice(0,10));
+  const [viewingSession,setViewingSession]=useState(null);
+  const [editingHistoryId,setEditingHistoryId]=useState(null);
+
+  // Finance view
+  const [finView,setFinView]=useState("overview");
+  const [donView,setDonView]=useState("tracker");
+
+  // Sync
+  const [syncStatus,setSyncStatus]=useState("connecting");
+  const [syncPulse,setSyncPulse]=useState(false);
+  const [firebaseError,setFirebaseError]=useState(null);
+  const DEV_EMAIL = "daab.edge@gmail.com";
+  const isRemoteUpdate=useRef(false);
+  const dbRef=useRef(null);
+  const membersRef=useRef(null);
+  const goalsRef=useRef(null);
+  const cardsRef=useRef(null);
+  const txnsRef=useRef(null);
+  const ledgerRef=useRef(null);
+  const historyRef=useRef(null);
+  const donorsRef=useRef(null);
+  const donationsRef=useRef(null);
+
+  // Report
+  const [dlFilter,setDlFilter]=useState("all");
+  const [dlDate,setDlDate]=useState(new Date().toISOString().slice(0,10));
+  const [dlCount,setDlCount]=useState(3);
+  const [dlMonth,setDlMonth]=useState(new Date().getMonth());
+  const [emailTo,setEmailTo]=useState("");
+
+  // ── AUTH LISTENER ───────────────────────────────────────────────────
+  useEffect(()=>{
+    const unsub=firebase.auth().onAuthStateChanged(user=>{
+      setIsAdmin(!!user);
+      setIsDev(!!(user&&user.email===DEV_EMAIL));
+      setAuthChecked(true);
+    });
+    return()=>unsub();
+  },[]);
+
+  // ── SET TIMER ───────────────────────────────────────────────────────
+  useEffect(()=>{
+    if(swOn){
+      swRef.current=setInterval(()=>{
+        setSwSecs(s=>{
+          const next=s+1;
+          if(next>=setDuration*60){
+            clearInterval(swRef.current);setSwOn(false);setSwFinished(true);
+            try{
+              const ctx=new(window.AudioContext||window.webkitAudioContext)();
+              const b=(f,st,d)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=f;o.type="square";g.gain.setValueAtTime(.3,ctx.currentTime+st);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+st+d);o.start(ctx.currentTime+st);o.stop(ctx.currentTime+st+d+.1);};
+              b(880,0,.3);b(880,.35,.3);b(880,.7,.3);b(1100,1.1,.6);
+            }catch(e){}
+            if(navigator.vibrate)navigator.vibrate([300,100,300,100,600]);
+            return next;
+          }
+          return next;
+        });
+      },1000);
+    }else clearInterval(swRef.current);
+    return()=>clearInterval(swRef.current);
+  },[swOn,setDuration]);
+
+  const resetSw=()=>{setSwSecs(0);setSwOn(false);setSwFinished(false);setShowPK(false);};
+  const logSet=(result,winner)=>{
+    setSetLog(l=>[...l,{id:Date.now(),setNum:l.length+1,teamA,teamB,duration:swSecs,result,winner}]);
+    setTeamA(winner);setTeamB("Set "+(setLog.length+2));resetSw();
+  };
+
+  // ── FIREBASE SYNC ────────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin)return;
+    if(!window._fbReady){setSyncStatus("error");setFirebaseError("Firebase failed to initialize.");return;}
+    let r;
+    try{r=window._fbDb.ref("session");dbRef.current=r;}
+    catch(e){setSyncStatus("error");setFirebaseError("Cannot connect: "+e.message);return;}
+
+    window._fbDb.ref(".info/connected").on("value",snap=>{
+      setSyncStatus(snap.val()?"live":"error");
+      if(snap.val())setFirebaseError(null);
+    });
+    r.on("value",snap=>{
+      setSyncStatus("live");setFirebaseError(null);
+      const data=snap.val();
+      if(!data)return;
+      isRemoteUpdate.current=true;
+      setSyncPulse(true);setTimeout(()=>setSyncPulse(false),600);
+      setTimeout(()=>{isRemoteUpdate.current=false;},2000);
+      setPlayers(toArr(data.players));
+      setTrainingExpenses(toArr(data.trainingExpenses));
+      setDonationExpenses(toArr(data.donationExpenses));
+      setPlayerSets(data.playerSets||{});
+      setPNotes(data.pNotes||{});
+      if(data.sessionType)setSessionType(data.sessionType);
+      if(data.sessionDate)setSessionDate(data.sessionDate);
+      setSessionNote(data.sessionNote||"");
+      setDonors(toArr(data.donors));
+      setDonations(data.donations&&typeof data.donations==="object"?data.donations:{});
+      setSetLog(toArr(data.setLog));
+      if(data.teamA)setTeamA(data.teamA);
+      if(data.teamB)setTeamB(data.teamB);
+      if(data.setDuration)setSetDuration(data.setDuration);
+      if(data.swSecs!=null)setSwSecs(data.swSecs);
+      if(data.swFinished!=null)setSwFinished(data.swFinished);
+      const rawH=toArr(data.sessionHistory);
+      setSessionHistory(rawH.map(s=>({...s,players:toArr(s.players),goals:toArr(s.goals),cards:toArr(s.cards),txns:toArr(s.txns),trainingExpenses:toArr(s.trainingExpenses),donationExpenses:toArr(s.donationExpenses),playerSets:s.playerSets||{},pNotes:s.pNotes||{}})));
+    },err=>{
+      setSyncStatus("error");
+      setFirebaseError("Firebase Rules Error: "+err.message+". Set rules to allow admin read/write.");
+    });
+    return()=>r.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT MEMBERS LISTENER ────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const mr=window._fbDb.ref("club_members");
+    membersRef.current=mr;
+    mr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setMembers([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setMembers(arr.filter(x=>x!=null&&x.id!=null));
+    },err=>{console.error("Members read error:",err);});
+    return()=>mr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT GOALS LISTENER ────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const gr=window._fbDb.ref("match_goals");
+    goalsRef.current=gr;
+    gr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setGoals([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setGoals(arr.filter(x=>x!=null&&x.id!=null));
+    },err=>{console.error("Goals read error:",err);});
+    return()=>gr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT CARDS LISTENER ────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const cr=window._fbDb.ref("match_cards");
+    cardsRef.current=cr;
+    cr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setCards([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setCards(arr.filter(x=>x!=null&&x.id!=null));
+    },err=>{console.error("Cards read error:",err);});
+    return()=>cr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT TRAINING TXNS (levies, late, card fines) ─────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const tr=window._fbDb.ref("training_txns");
+    txnsRef.current=tr;
+    tr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setTxns([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setTxns(arr.filter(x=>x!=null&&x.id!=null&&!x.deleted));
+    },err=>{console.error("Txns read error:",err);});
+    return()=>tr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT FINANCE LEDGER ─────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const lr=window._fbDb.ref("finance_ledger");
+    ledgerRef.current=lr;
+    lr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setLedger([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setLedger(arr.filter(x=>x!=null&&x.id!=null));
+    },err=>{console.error("Ledger read error:",err);});
+    return()=>lr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT SESSION HISTORY ────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const hr=window._fbDb.ref("club_history");
+    historyRef.current=hr;
+    hr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setSessionHistory([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setSessionHistory(arr.filter(x=>x!=null&&x.id!=null).map(s=>({
+        ...s,
+        players:toArr(s.players),goals:toArr(s.goals),cards:toArr(s.cards),
+        txns:toArr(s.txns),trainingExpenses:toArr(s.trainingExpenses),
+        donationExpenses:toArr(s.donationExpenses),
+        playerSets:s.playerSets||{},pNotes:s.pNotes||{}
+      })));
+    },err=>{console.error("History read error:",err);});
+    return()=>hr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT DONORS ─────────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const dr=window._fbDb.ref("club_donors");
+    donorsRef.current=dr;
+    dr.on("value",snap=>{
+      const data=snap.val();
+      if(!data){setDonors([]);return;}
+      const arr=Array.isArray(data)?data:Object.values(data);
+      setDonors(arr.filter(x=>x!=null&&x.id!=null&&!x.deleted));
+    },err=>{console.error("Donors read error:",err);});
+    return()=>dr.off();
+  },[authChecked,isAdmin]);
+
+  // ── PERMANENT DONATIONS GRID ─────────────────────────────────────────────
+  useEffect(()=>{
+    if(!authChecked||!isAdmin||!window._fbReady)return;
+    const dgr=window._fbDb.ref("club_donations");
+    donationsRef.current=dgr;
+    dgr.on("value",snap=>{
+      const data=snap.val();
+      setDonations(data&&typeof data==="object"?data:{});
+    },err=>{console.error("Donations read error:",err);});
+    return()=>dgr.off();
+  },[authChecked,isAdmin]);
+
+  // ── SAVE ─────────────────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!dbRef.current||isRemoteUpdate.current||!isAdmin)return;
+    const pack=arr=>{if(!arr||!arr.length)return{};const o={};arr.filter(x=>x!=null).forEach((x,i)=>{o[x.id!=null?x.id:i]=x;});return o;};
+    setSyncStatus("saving");
+    const t=setTimeout(()=>{
+      dbRef.current.set({
+        players:pack(players),
+        trainingExpenses:pack(trainingExpenses),donationExpenses:pack(donationExpenses),
+        playerSets:playerSets||{},pNotes:pNotes||{},
+        sessionType,sessionDate,sessionNote:sessionNote||"",
+        setLog:pack(setLog),teamA:teamA||"Set 1",teamB:teamB||"Set 2",
+        setDuration:setDuration||15,swSecs,swFinished:swFinished||false,
+      }).then(()=>setSyncStatus("live")).catch(()=>setSyncStatus("error"));
+    },150);
+    return()=>clearTimeout(t);
+  },[players,trainingExpenses,donationExpenses,
+     playerSets,pNotes,sessionType,sessionDate,sessionNote,setLog,
+     teamA,teamB,setDuration,swFinished,isAdmin]);
+
+  // ── DERIVED ────────────────────────────────────────────────────────
+  const sessionFee=SESSION_FEES[sessionType];
+  const isReg=name=>members.filter(m=>m&&m.name).some(m=>m.name.toLowerCase()===name.toLowerCase());
+  const paidIds=new Set(txns.filter(t=>t&&["session","cash","group","transfer"].includes(t.type)).flatMap(t=>t.playerIds||[]));
+  const lateIds=new Set(txns.filter(t=>t&&t.type==="late").flatMap(t=>t.playerIds||[]));
+  const pName2=id=>players.find(p=>p&&p.id===id)?.name||"?";
+
+  // Training account
+  const trainingIncome=txns.filter(t=>t).reduce((s,t)=>s+(t.amount||0),0);
+  const trainingExp=trainingExpenses.filter(e=>e).reduce((s,e)=>s+(e.amount||0),0);
+  const trainingBal=trainingIncome-trainingExp;
+
+  // Donation account
+  const MONTHS_IDX=MONTHS;
+  const donRowTotal=id=>MONTHS.reduce((s,m)=>s+(((donations||{})[id]||{})[m]||0),0);
+  const donColTotal=m=>(donors||[]).filter(d=>d&&d.id).reduce((s,d)=>s+(((donations||{})[d.id]||{})[m]||0),0);
+  const donGrandTotal=(donors||[]).filter(d=>d&&d.id).reduce((s,d)=>s+donRowTotal(d.id),0);
+  const donationExp=(donationExpenses||[]).filter(e=>e).reduce((s,e)=>s+(e.amount||0),0);
+  const donationBal=donGrandTotal-donationExp;
+
+  const unpaidCards=(cards||[]).filter(c=>c&&!c.paid);
+  const netTotal=trainingBal+donationBal;
+  const maxSets=Math.max(1,...Object.values(playerSets||{}).filter(v=>typeof v==="number"));
+  const setNumbers=Array.from({length:Math.max(5,maxSets+1)},(_,i)=>i+1);
+
+  // ── ACTIONS ────────────────────────────────────────────────────────
+  const addMember=()=>{
+    if(!mName.trim())return;
+    const newMember={id:Date.now(),name:mName.trim()};
+    // Write directly to permanent Firebase path — bypasses session save entirely
+    if(membersRef.current){
+      const id=newMember.id;
+      membersRef.current.child(String(id)).set(newMember)
+        .then(()=>console.log("Member saved permanently ✅"))
+        .catch(e=>console.error("Member save failed:",e));
+    }
+    setMembers(m=>[...m,newMember]);
+    setMName("");setShowMForm(false);
+  };
+  const removeMember=id=>{
+    setMembers(m=>m.filter(x=>x&&x.id!==id));
+    if(membersRef.current){
+      membersRef.current.child(String(id)).remove()
+        .catch(e=>console.error("Member delete failed:",e));
+    }
+  };
+  const addPlayer=()=>{if(!pName.trim())return;setPlayers(ps=>[...ps,{id:Date.now(),name:pName.trim()}]);setPName("");setShowPForm(false);};
+  const addMemberToSession=m=>{if((players||[]).find(p=>p&&p.name&&m.name&&p.name.toLowerCase()===m.name.toLowerCase()))return;setPlayers(ps=>[...ps,{id:Date.now(),name:m.name}]);};
+  const removePlayer=id=>{setPlayers(ps=>ps.filter(p=>p&&p.id!==id));setPlayerSets(ps=>{const n={...ps};delete n[id];return n;});};
+
+  // Write every transaction permanently to finance_ledger AND training_txns
+  const writeLedger=txn=>{
+    const entry={
+      id:Date.now(),
+      date:sessionDate,
+      timestamp:new Date().toISOString(),
+      deleted:false,
+      ...txn
+    };
+    // Write to permanent ledger
+    if(ledgerRef.current){
+      ledgerRef.current.child(String(entry.id)).set(entry)
+        .catch(e=>console.error("Ledger write failed:",e));
+    }
+    setLedger(l=>[...l,entry]);
+    // Write income entries to permanent training_txns too
+    if(entry.account==="training"&&entry.amount>0){
+      const txnEntry={id:entry.id,date:entry.date,amount:entry.amount,
+        note:entry.note,method:entry.method,category:entry.category,
+        type:entry.type,playerIds:entry.playerIds||[],
+        playerName:entry.playerName||"",deleted:false};
+      if(txnsRef.current){
+        txnsRef.current.child(String(entry.id)).set(txnEntry)
+          .catch(e=>console.error("Txn write failed:",e));
+      }
+      setTxns(t=>[...t,txnEntry]);
+    }
+  };
+  const recordTxn=writeLedger;
+  const recordPay=(player,method)=>{writeLedger({type:method==="cash"?"cash":"transfer",playerIds:[player.id],amount:sessionFee,note:`Training levy – ${player.name}`,method,category:"Training Levy",account:"training"});setPayModal(null);};
+  const recordGroup=method=>{
+    if(!groupCovered.length||!groupPayer)return;
+    const payerName=(players||[]).find(p=>p&&String(p.id)===String(groupPayer))?.name||"?";
+    writeLedger({type:"group",playerIds:groupCovered.map(Number),amount:groupCovered.length*sessionFee,note:`Group payment (${groupCovered.length}x levy) by ${payerName}`,method:method||groupMethod,category:"Training Levy",account:"training"});
+    setGroupCovered([]);setGroupPayer("");setShowGroupForm(false);
+  };
+  const recordLate=()=>{
+    if(!latePlayer)return;
+    const pid=Number(latePlayer);
+    const pname=pName2(pid);
+    const lateTotalFee=sessionFee+LATE_FEE; // e.g. 200+100=300
+    writeLedger({
+      type:"late",
+      playerIds:[pid],
+      amount:lateTotalFee,
+      note:`Training levy (late) – ${pname}`,
+      method:lateMethod,
+      category:"Training Levy",
+      account:"training",
+      isLate:true
+    });
+    setLatePlayer("");setShowLateForm(false);
+  };
+  const markCardPaid=(cardId,method)=>{
+    const card=(cards||[]).find(c=>c&&c.id===cardId);if(!card)return;
+    setCards(cs=>cs.map(c=>c&&c.id===cardId?{...c,paid:true}:c));
+    if(cardsRef.current) cardsRef.current.child(String(cardId)).update({paid:true}).catch(e=>console.error("Card update failed:",e));
+    writeLedger({type:"card_fine",playerIds:[],playerName:card.playerName,amount:CARD_FINE[card.type],note:`${card.type==="yellow"?"Yellow":"Red"} card fine – ${card.playerName}`,method,category:"Fines",account:"training"});
+  };
+  const addTrainingExpense=()=>{
+    if(!txDesc.trim()||!txAmt)return;
+    const entry={id:Date.now(),desc:txDesc.trim(),amount:Number(txAmt),category:txCat,date:txDate,account:"training"};
+    setTrainingExpenses(e=>[...e,entry]);
+    writeLedger({type:"expense",note:entry.desc,amount:-entry.amount,category:entry.category,method:"expense",account:"training"});
+    setTxDesc("");setTxAmt("");setShowTxForm(false);
+  };
+  const addDonationExpense=()=>{
+    if(!dxDesc.trim()||!dxAmt)return;
+    const entry={id:Date.now(),desc:dxDesc.trim(),amount:Number(dxAmt),category:dxCat,date:dxDate,account:"donation"};
+    setDonationExpenses(e=>[...e,entry]);
+    writeLedger({type:"expense",note:entry.desc,amount:-entry.amount,category:entry.category,method:"expense",account:"donation"});
+    setDxDesc("");setDxAmt("");setShowDxForm(false);
+  };
+  const startEdit=(donorId,month)=>{setEditingCell({donorId,month});setCellValue(String(((donations||{})[donorId]||{})[month]||""));};
+  const commitEdit=()=>{
+    if(!editingCell)return;
+    const{donorId,month}=editingCell;
+    const amt=Number(cellValue)||0;
+    setDonations(d=>({...d,[donorId]:{...(d[donorId]||{}),[month]:amt}}));
+    // Write directly to club_donations/donorId/month permanently
+    if(donationsRef.current){
+      donationsRef.current.child(String(donorId)).child(month).set(amt)
+        .catch(e=>console.error("Donation save failed:",e));
+    }
+    // Also record as ledger entry if amount > 0
+    if(amt>0){
+      const donor=(donors||[]).find(d=>d&&d.id===donorId);
+      const donorName=donor?donor.name:"Unknown";
+      writeLedger({
+        type:"donation",
+        playerName:donorName,
+        donorId,month,
+        amount:amt,
+        note:`Donation – ${donorName} (${month})`,
+        method:"recorded",
+        category:"Donation",
+        account:"donation"
+      });
+    }
+    setEditingCell(null);setCellValue("");
+  };
+  const copyClip=(val,field)=>{navigator.clipboard?.writeText(val).then(()=>{setCopied(field);setTimeout(()=>setCopied(null),1800);});};
+
+  // ── REPORT ─────────────────────────────────────────────────────────
+  const buildReport=sessions=>{
+    if(!sessions.length)return "No sessions found.";
+    const lines=[];
+    lines.push("=".repeat(50));
+    lines.push("  SHAS FC — SESSION REPORT");
+    lines.push("  "+new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"}));
+    lines.push("=".repeat(50));
+    const tInc=sessions.reduce((s,x)=>s+(x.txns||[]).reduce((a,t)=>a+(t.amount||0),0),0);
+    const tExp=sessions.reduce((s,x)=>s+(x.trainingExpenses||[]).reduce((a,e)=>a+(e.amount||0),0),0);
+    const dExp=sessions.reduce((s,x)=>s+(x.donationExpenses||[]).reduce((a,e)=>a+(e.amount||0),0),0);
+    lines.push("");lines.push("  TRAINING ACCOUNT");lines.push("-".repeat(50));
+    lines.push(`  Income:   ₦${tInc.toLocaleString()}`);
+    lines.push(`  Expenses: ₦${tExp.toLocaleString()}`);
+    lines.push(`  Balance:  ₦${(tInc-tExp).toLocaleString()}`);
+    lines.push("");lines.push("  DONATION ACCOUNT");lines.push("-".repeat(50));
+    lines.push(`  Donations: ₦${donGrandTotal.toLocaleString()}`);
+    lines.push(`  Expenses:  ₦${(donationExp+dExp).toLocaleString()}`);
+    lines.push(`  Balance:   ₦${(donGrandTotal-donationExp-dExp).toLocaleString()}`);
+    lines.push("");
+    sessions.forEach((s,idx)=>{
+      const inc=(s.txns||[]).reduce((a,t)=>a+(t.amount||0),0);
+      const tE=(s.trainingExpenses||[]).reduce((a,e)=>a+(e.amount||0),0);
+      lines.push("-".repeat(50));
+      lines.push(`SESSION ${idx+1}: ${s.sessionType} — ${new Date(s.sessionDate+"T12:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}`);
+      lines.push(`Players (${(s.players||[]).length}): ${(s.players||[]).map(p=>p.name).join(", ")||"None"}`);
+      if((s.goals||[]).length){lines.push("Goals:");(s.goals||[]).forEach((g,i)=>lines.push(`  ${i+1}. ⚽ ${g.scorerName}${g.assistName?" (assist: "+g.assistName+")":""}`));}
+      if((s.txns||[]).length){lines.push(`Payments — ₦${inc.toLocaleString()}:`);(s.txns||[]).forEach(t=>lines.push(`  + ₦${t.amount.toLocaleString()} · ${t.note}`));}
+      if(tE>0){lines.push(`Training Expenses — ₦${tE.toLocaleString()}:`);(s.trainingExpenses||[]).forEach(e=>lines.push(`  - ₦${e.amount.toLocaleString()} · ${e.desc}`));}
+      if(s.sessionNote)lines.push(`Notes: ${s.sessionNote}`);
+      lines.push(`Training Net: ₦${(inc-tE).toLocaleString()}`);
+      lines.push("");
+    });
+    lines.push("=".repeat(50));lines.push("  END OF REPORT");
+    return lines.join("\n");
+  };
+  const getFiltered=()=>{
+    const all=[...sessionHistory].sort((a,b)=>b.sessionDate.localeCompare(a.sessionDate));
+    if(dlFilter==="day")return all.filter(s=>s.sessionDate===dlDate);
+    if(dlFilter==="sessions")return all.slice(0,dlCount);
+    if(dlFilter==="month")return all.filter(s=>new Date(s.sessionDate+"T12:00:00").getMonth()===dlMonth);
+    return all;
+  };
+  const downloadReport=()=>{
+    const blob=new Blob([buildReport(getFiltered())],{type:"text/plain"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");
+    a.href=url;a.download=`SHAS-Report-${new Date().toISOString().slice(0,10)}.txt`;a.click();URL.revokeObjectURL(url);
+  };
+
+  // ── SHOW LOGIN SCREEN IF NOT AUTHENTICATED ─────────────────────────
+  if(!authChecked){
+    return(
+      <div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,color:"#4ade80"}}>
+        <div style={{fontSize:48}}>⚽</div>
+        <div style={{fontSize:14,color:"#6b7280"}}>Checking auth...</div>
+      </div>
+    );
+  }
+  if(!isAdmin){
+    return <LoginScreen onLogin={()=>setIsAdmin(true)}/>;
+  }
+
+  const tabs=[
+    {id:"session",icon:"⚽",label:"Session"},
+    {id:"members",icon:"📋",label:"Members"},
+    {id:"squad",icon:"👥",label:"Squad"},
+    {id:"match",icon:"🏟",label:"Match"},
+    {id:"payments",icon:"💷",label:"Pay"},
+    {id:"training",icon:"📊",label:"Training"},
+    {id:"donations",icon:"🤝",label:"Donate"},
+    {id:"notes",icon:"✏️",label:"Notes"},
+    {id:"history",icon:"📅",label:"History"},
+  ];
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#e8eaf0",paddingBottom:50}}>
+      <div style={{position:"fixed",inset:0,opacity:.03,pointerEvents:"none",backgroundImage:"repeating-linear-gradient(0deg,transparent,transparent 39px,#4ade80 39px,#4ade80 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#4ade80 39px,#4ade80 40px)"}}/>
+
+      {/* Bank modal */}
+      {payModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={e=>{if(e.target===e.currentTarget)setPayModal(null);}}>
+          <div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{background:"#111827",borderRadius:"20px 20px 0 0",border:"1px solid rgba(255,255,255,0.1)",padding:24,width:"100%",maxWidth:480}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+              <div><div style={{fontSize:16,fontWeight:700}}>🏦 Bank Transfer</div><div style={{fontSize:12,color:"#6b7280"}}>{payModal.name} — {N(sessionFee)}</div></div>
+              <button onClick={()=>setPayModal(null)} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"#9ca3af",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:16}}>✕</button>
+            </div>
+            <div style={{background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.25)",borderRadius:12,padding:"12px 16px",marginBottom:14,textAlign:"center"}}>
+              <div style={{fontSize:34,fontWeight:800,color:"#4ade80"}}>{N(sessionFee)}</div>
+            </div>
+            <div style={{background:"rgba(255,255,255,0.04)",borderRadius:12,overflow:"hidden",marginBottom:14}}>
+              {[{label:"Account Name",value:BANK.name,f:"n"},{label:"Bank",value:BANK.bank,f:"b"},{label:"Account No.",value:BANK.account,f:"a"},{label:"Reference",value:`${BANK.ref}-${payModal.name.split(" ")[1]?.toUpperCase()||payModal.id}`,f:"r"}].map((row,i,arr)=>(
+                <div key={row.f} onClick={()=>copyClip(row.value,row.f)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",cursor:"pointer",borderBottom:i<arr.length-1?"1px solid rgba(255,255,255,0.05)":"none",background:copiedField===row.f?"rgba(74,222,128,0.07)":"transparent"}}>
+                  <span style={{fontSize:12,color:"#6b7280"}}>{row.label}</span>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{fontSize:13,fontWeight:600}}>{row.value}</span>
+                    <span style={{fontSize:10,color:copiedField===row.f?"#4ade80":"#374151"}}>{copiedField===row.f?"✓ Copied":"Copy"}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>recordPay(payModal,"cash")} style={{flex:1,padding:"12px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#9ca3af",fontWeight:600,cursor:"pointer",fontSize:13}}>💵 Cash</button>
+              <button onClick={()=>recordPay(payModal,"transfer")} style={{flex:2,padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#16a34a,#4ade80)",color:"#0a0e1a",fontWeight:800,cursor:"pointer",fontSize:13}}>✓ Mark Transfer Paid</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{background:"linear-gradient(135deg,#0d1f0e,#0a1628)",borderBottom:"1px solid rgba(74,222,128,0.15)",padding:"18px 20px 14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12,justifyContent:"space-between"}}>
+          <div style={{width:44,height:44,borderRadius:10,background:"linear-gradient(135deg,#065f46,#4ade80)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>⚽</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:17,fontWeight:700}}>SHAS FC</div>
+            <div style={{fontSize:11,color:"#6b7280",display:"flex",alignItems:"center",gap:6}}>
+              {today}
+              <span style={{fontSize:10,color:syncStatus==="live"?"#4ade80":syncStatus==="saving"?"#fbbf24":"#f87171",fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
+                {syncStatus==="live"&&<span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:syncPulse?"#fff":"#4ade80",boxShadow:"0 0 6px #4ade80",animation:"pulse 2s infinite",transition:"background .2s"}}/>}
+                {syncStatus==="saving"&&<span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:"#fbbf24"}}/>}
+                {syncStatus==="error"&&<span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:"#f87171"}}/>}
+                {syncStatus==="live"?"Live":syncStatus==="saving"?"Saving...":"Offline"}
+              </span>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+            {isDev&&<div style={{fontSize:9,background:"rgba(239,68,68,0.2)",color:"#f87171",borderRadius:6,padding:"4px 8px",fontWeight:800,textTransform:"uppercase",letterSpacing:"0.4px"}}>🔴 Dev</div>}
+            <button onClick={()=>{firebase.auth().signOut();setIsAdmin(false);setIsDev(false);}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.08)",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:11}}>🚪 Logout</button>
+          </div>
+        </div>
+
+        {/* Account summary pills */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
+          {[
+            {l:"Training",v:N(trainingBal),c:trainingBal>=0?"#4ade80":"#f87171"},
+            {l:"Donation",v:N(donationBal),c:donationBal>=0?"#fbbf24":"#f87171"},
+            {l:"Players",v:`${(players||[]).length}`,c:"#60a5fa"},
+            {l:"Paid",v:`${paidIds.size}`,c:"#a78bfa"},
+          ].map(s=>(
+            <div key={s.l} style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"7px 4px",textAlign:"center",border:"1px solid rgba(255,255,255,0.07)"}}>
+              <div style={{fontSize:11,fontWeight:700,color:s.c}}>{s.v}</div>
+              <div style={{fontSize:9,color:"#4b5563",marginTop:2}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+        {firebaseError&&(
+          <div style={{background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",borderRadius:10,padding:"10px 14px",marginTop:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#f87171",marginBottom:4}}>🔴 Firebase Error</div>
+            <div style={{fontSize:11,color:"#fca5a5",lineHeight:1.6}}>{firebaseError}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Tab bar */}
+      <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid rgba(255,255,255,0.06)",background:"#0c1220",position:"sticky",top:0,zIndex:10,scrollbarWidth:"none"}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flexShrink:0,padding:"10px 8px 9px",border:"none",background:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:tab===t.id?"#4ade80":"#4b5563",borderBottom:tab===t.id?"2px solid #4ade80":"2px solid transparent",fontSize:8,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px",minWidth:44}}>
+            <span style={{fontSize:14}}>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{padding:16,maxWidth:500,margin:"0 auto",position:"relative",zIndex:1}}>
+
+        {/* ══ SESSION ══ */}
+        {tab==="session"&&(
+          <div>
+            <div style={{textAlign:"center",marginBottom:20,paddingTop:8}}>
+              <div style={{width:90,height:90,borderRadius:16,background:"linear-gradient(135deg,#065f46,#4ade80)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:48,margin:"0 auto",boxShadow:"0 8px 32px rgba(74,222,128,0.25)"}}>⚽</div>
+              <div style={{fontSize:16,fontWeight:800,color:"#fbbf24",marginTop:10}}>STATE HOUSING ALL STARS FC</div>
+              <div style={{fontSize:11,color:"#6b7280",fontStyle:"italic",marginTop:3}}>For the Love of the Game · Calabar</div>
+            </div>
+
+            {/* Account snapshot */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              <AccCard title="Training" icon="💵" color="74,222,128" income={trainingIncome} expenses={trainingExp} badge={`${(players||[]).length} players`}/>
+              <AccCard title="Donations" icon="🤝" color="251,191,36" income={donGrandTotal} expenses={donationExp} badge={`${(donors||[]).length} pioneers`}/>
+            </div>
+
+            <div style={{marginBottom:12}}><Lbl>Session Type</Lbl><select value={sessionType} onChange={e=>setSessionType(e.target.value)} style={sS}>{SESSION_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div style={{marginBottom:16}}><Lbl>Date</Lbl><input type="date" value={sessionDate} onChange={e=>setSessionDate(e.target.value)} style={iS}/></div>
+
+            {/* Set timer */}
+            <div style={{background:"linear-gradient(135deg,rgba(74,222,128,0.06),rgba(16,185,129,0.03))",border:"1px solid rgba(74,222,128,0.18)",borderRadius:16,padding:18,marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>⏱ Set Timer</div>
+                <div style={{fontSize:11,color:"#6b7280"}}>Set {setLog.length+1}</div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 28px 1fr",gap:6,alignItems:"center",marginBottom:14}}>
+                <input value={teamA} onChange={e=>setTeamA(e.target.value)} style={{...iS,textAlign:"center",fontWeight:800,fontSize:13,color:"#60a5fa",background:"rgba(96,165,250,0.1)",borderColor:"rgba(96,165,250,0.3)"}}/>
+                <div style={{textAlign:"center",fontSize:12,fontWeight:800,color:"#6b7280"}}>vs</div>
+                <input value={teamB} onChange={e=>setTeamB(e.target.value)} style={{...iS,textAlign:"center",fontWeight:800,fontSize:13,color:"#f87171",background:"rgba(239,68,68,0.1)",borderColor:"rgba(239,68,68,0.3)"}}/>
+              </div>
+              {!swOn&&!swFinished&&(
+                <div style={{marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:11,color:"#6b7280",fontWeight:600}}>Duration: <span style={{color:"#4ade80",fontWeight:800}}>{setDuration} min</span></span></div>
+                  <input type="range" min={1} max={45} value={setDuration} onChange={e=>setSetDuration(Number(e.target.value))} style={{width:"100%",accentColor:"#4ade80",cursor:"pointer"}}/>
+                </div>
+              )}
+              <div style={{textAlign:"center",marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:6,color:swFinished?"#f87171":"#4ade80"}}>{swFinished?"⏰ FULL TIME!":swOn?`${teamA} vs ${teamB}`:swSecs>0?"PAUSED":`${setDuration} MIN SET`}</div>
+                <div style={{fontSize:60,fontWeight:800,letterSpacing:"-3px",color:swFinished?"#f87171":"#fff",fontVariantNumeric:"tabular-nums",lineHeight:1}}>{fmt(swSecs)}</div>
+                <div style={{marginTop:10}}>
+                  <div style={{height:6,background:"rgba(255,255,255,0.07)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",borderRadius:3,background:swFinished?"#ef4444":"linear-gradient(90deg,#16a34a,#4ade80)",width:`${Math.min(100,(swSecs/(setDuration*60))*100)}%`,transition:"width 1s linear"}}/>
+                  </div>
+                  <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>{swFinished?"Full time":fmt(Math.max(0,setDuration*60-swSecs))+" remaining"}</div>
+                </div>
+              </div>
+              {!swFinished&&(
+                <div style={{display:"flex",gap:8,marginBottom:swOn?10:0}}>
+                  <button onClick={()=>setSwOn(r=>!r)} style={{flex:1,padding:"11px",borderRadius:9,border:"none",background:swOn?"rgba(239,68,68,0.2)":"linear-gradient(135deg,#16a34a,#4ade80)",color:swOn?"#ef4444":"#0a0e1a",fontWeight:800,cursor:"pointer",fontSize:14}}>{swOn?"⏸ Pause":swSecs===0?"▶ Start Set":"▶ Resume"}</button>
+                  <button onClick={resetSw} style={{padding:"11px 16px",borderRadius:9,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#6b7280",cursor:"pointer",fontSize:13}}>↺</button>
+                </div>
+              )}
+              {swOn&&<button onClick={()=>{setSwOn(false);setSwFinished(true);}} style={{width:"100%",padding:"10px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#1d4ed8,#60a5fa)",color:"#fff",fontWeight:800,cursor:"pointer",fontSize:13,marginTop:6}}>⚽ Goal Scored — End Set</button>}
+              {swFinished&&!showPK&&(
+                <div style={{marginTop:4}}>
+                  <div style={{fontSize:11,color:"#6b7280",textAlign:"center",marginBottom:10}}>Who won?</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                    <button onClick={()=>logSet("goal",teamA)} style={{padding:"12px 8px",borderRadius:9,border:"1px solid rgba(96,165,250,0.4)",background:"rgba(96,165,250,0.15)",color:"#60a5fa",fontWeight:800,cursor:"pointer",fontSize:13}}>⚽ {teamA}</button>
+                    <button onClick={()=>logSet("goal",teamB)} style={{padding:"12px 8px",borderRadius:9,border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.15)",color:"#f87171",fontWeight:800,cursor:"pointer",fontSize:13}}>⚽ {teamB}</button>
+                  </div>
+                  <button onClick={()=>setShowPK(true)} style={{width:"100%",padding:"10px",borderRadius:9,border:"1px solid rgba(251,191,36,0.4)",background:"rgba(251,191,36,0.1)",color:"#fbbf24",fontWeight:800,cursor:"pointer",fontSize:13}}>🥅 Penalties (PK)</button>
+                </div>
+              )}
+              {swFinished&&showPK&&(
+                <div style={{marginTop:4}}>
+                  <div style={{fontSize:11,color:"#fbbf24",textAlign:"center",marginBottom:10,fontWeight:700}}>🥅 PK — Who wins?</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <button onClick={()=>logSet("pk",teamA)} style={{padding:"12px 8px",borderRadius:9,border:"1px solid rgba(96,165,250,0.4)",background:"rgba(96,165,250,0.15)",color:"#60a5fa",fontWeight:800,cursor:"pointer",fontSize:13}}>🥅 {teamA}</button>
+                    <button onClick={()=>logSet("pk",teamB)} style={{padding:"12px 8px",borderRadius:9,border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.15)",color:"#f87171",fontWeight:800,cursor:"pointer",fontSize:13}}>🥅 {teamB}</button>
+                  </div>
+                  <button onClick={()=>setShowPK(false)} style={{width:"100%",marginTop:8,padding:"8px",borderRadius:9,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"#6b7280",cursor:"pointer",fontSize:12}}>← Back</button>
+                </div>
+              )}
+            </div>
+
+            {setLog.filter(s=>s&&s.id).length>0&&(
+              <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,padding:14,marginBottom:16}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:700}}>📋 Sets <span style={{background:"rgba(255,255,255,0.08)",color:"#9ca3af",borderRadius:6,padding:"1px 8px",fontSize:11,marginLeft:4}}>{setLog.length}</span></div>
+                  <div style={{fontSize:11,color:"#6b7280"}}>Total: {fmt(setLog.filter(s=>s).reduce((s,x)=>s+x.duration,0))}</div>
+                </div>
+                {setLog.filter(s=>s&&s.id).map((s,i)=>(
+                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:9,marginBottom:6,background:i%2===0?"rgba(255,255,255,0.02)":"transparent",border:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,#1d4ed8,#60a5fa)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:11,color:"#fff",flexShrink:0}}>{s.setNum}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:700}}>{s.teamA} <span style={{color:"#4b5563"}}>vs</span> {s.teamB}</div>
+                      <div style={{fontSize:10,color:"#6b7280"}}>{s.result==="pk"?"🥅 PK":"⚽ Goal"} · <span style={{color:"#4ade80",fontWeight:700}}>{s.winner} wins</span></div>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:800,color:"#fbbf24"}}>{fmt(s.duration)}</div>
+                    <button onClick={()=>setSetLog(l=>l.filter(x=>x&&x.id!==s.id))} style={{width:24,height:24,borderRadius:5,border:"none",background:"rgba(239,68,68,0.1)",color:"#ef4444",cursor:"pointer",fontSize:11}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{background:"linear-gradient(135deg,rgba(239,68,68,0.08),rgba(251,191,36,0.05))",border:"1px solid rgba(239,68,68,0.2)",borderRadius:14,padding:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#f87171",marginBottom:4}}>📅 End & Save Session</div>
+              <div style={{fontSize:11,color:"#6b7280",marginBottom:12}}>Archives this session and clears squad for next day.</div>
+              <button onClick={()=>{
+                if((players||[]).length===0&&(goals||[]).length===0&&(txns||[]).length===0){alert("Nothing to save!");return;}
+                if(!window.confirm(`Save "${sessionType}" session on ${sessionDate}?`))return;
+                // Snapshot current txns + expenses into the archive
+                const sessionTxns=[...(txns||[])];
+                const sessionTrExp=[...(trainingExpenses||[])];
+                const sessionDonExp=[...(donationExpenses||[])];
+                const archived={
+                  id:Date.now(),sessionType,sessionDate,
+                  players:[...(players||[])],
+                  playerSets:{...playerSets},
+                  goals:[...(goals||[])],
+                  cards:[...(cards||[])],
+                  txns:sessionTxns,
+                  trainingExpenses:sessionTrExp,
+                  donationExpenses:sessionDonExp,
+                  sessionNote,pNotes:{...pNotes},
+                  setLog:[...(setLog||[])],
+                  savedAt:new Date().toISOString(),
+                  deleted:false,
+                  // Summary totals for quick display
+                  totalIncome:sessionTxns.reduce((s,t)=>s+(t.amount||0),0),
+                  totalTrainingExp:sessionTrExp.reduce((s,e)=>s+(e.amount||0),0),
+                  totalDonationExp:sessionDonExp.reduce((s,e)=>s+(e.amount||0),0),
+                };
+                // Save to permanent history
+                if(historyRef.current){
+                  historyRef.current.child(String(archived.id)).set(archived)
+                    .catch(e=>console.error("History save failed:",e));
+                }
+                setSessionHistory(h=>[...h,archived]);
+
+                // ── CLEAR current session Pay + Training tabs ──────────────
+                // Clear local state
+                setTxns([]);
+                setTrainingExpenses([]);
+                setDonationExpenses([]);
+                // Clear training_txns in Firebase (current session cleared, history has the snapshot)
+                if(txnsRef.current) txnsRef.current.remove().catch(e=>console.error(e));
+                // Clear players, squad, notes
+                setPlayers([]);setPlayerSets({});setSessionNote("");setPNotes({});setSetLog([]);
+                setTeamA("Set 1");setTeamB("Set 2");resetSw();
+                setSessionDate(new Date().toISOString().slice(0,10));setSessionType("Wednesday");
+                alert("✅ Session saved! Pay & Training cleared. Check History for full record.");
+              }} style={{width:"100%",padding:"14px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#7f1d1d,#ef4444)",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>💾 End Session & Start New Day</button>
+            </div>
+          </div>
+        )}
+
+        {/* ══ MEMBERS ══ */}
+        {tab==="members"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:13,color:"#6b7280"}}>{(members||[]).length} registered members</div>
+              <button onClick={()=>setShowMForm(f=>!f)} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:`1px solid ${showMForm?"rgba(239,68,68,0.4)":"rgba(167,139,250,0.4)"}`,background:showMForm?"rgba(239,68,68,0.1)":"rgba(167,139,250,0.1)",color:showMForm?"#f87171":"#a78bfa",cursor:"pointer",fontWeight:600}}>{showMForm?"✕ Cancel":"+ Add Member"}</button>
+            </div>
+            {showMForm&&(
+              <div onClick={e=>e.stopPropagation()} style={{background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:12,padding:14,marginBottom:14}}>
+                <Lbl c="#a78bfa">New Member</Lbl>
+                <div style={{display:"flex",gap:8,marginTop:6}}>
+                  <input value={mName} onChange={e=>setMName(e.target.value)} placeholder="Full name" style={{...iS,flex:1}} onKeyDown={e=>e.key==="Enter"&&addMember()}/>
+                  <button onClick={addMember} disabled={!mName.trim()} style={{padding:"9px 16px",borderRadius:8,border:"none",background:mName.trim()?"linear-gradient(135deg,#6d28d9,#a78bfa)":"rgba(255,255,255,0.05)",color:mName.trim()?"#fff":"#4b5563",fontWeight:800,cursor:mName.trim()?"pointer":"not-allowed"}}>Add</button>
+                </div>
+              </div>
+            )}
+            {(members||[]).filter(m=>m&&m.id).map(m=>(
+              <div key={m.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:10,marginBottom:7,background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.15)"}}>
+                <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:"#fff",flexShrink:0}}>{m.name.charAt(0).toUpperCase()}</div>
+                <div style={{flex:1}}><div style={{fontWeight:600,fontSize:14}}>{m.name}</div><div style={{fontSize:10,color:"#a78bfa",fontWeight:600}}>REGISTERED MEMBER</div></div>
+                <button onClick={()=>addMemberToSession(m)} style={{padding:"6px 10px",borderRadius:7,border:`1px solid ${(players||[]).find(p=>p&&p.name&&m.name&&p.name.toLowerCase()===m.name.toLowerCase())?"rgba(74,222,128,0.4)":"rgba(255,255,255,0.1)"}`,background:(players||[]).find(p=>p&&p.name&&m.name&&p.name.toLowerCase()===m.name.toLowerCase())?"rgba(74,222,128,0.15)":"rgba(255,255,255,0.04)",color:(players||[]).find(p=>p&&p.name&&m.name&&p.name.toLowerCase()===m.name.toLowerCase())?"#4ade80":"#9ca3af",cursor:"pointer",fontSize:11,fontWeight:600}}>{(players||[]).find(p=>p&&p.name&&m.name&&p.name.toLowerCase()===m.name.toLowerCase())?"✓ Added":"+ Session"}</button>
+                <button onClick={()=>removeMember(m.id)} style={{width:28,height:28,borderRadius:6,border:"none",background:"rgba(239,68,68,0.1)",color:"#ef4444",cursor:"pointer",fontSize:13}}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ══ SQUAD ══ */}
+        {tab==="squad"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:13,color:"#6b7280"}}>{(players||[]).length} players · {paidIds.size} paid</div>
+              <button onClick={()=>setShowPForm(f=>!f)} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:`1px solid ${showPForm?"rgba(239,68,68,0.4)":"rgba(74,222,128,0.4)"}`,background:showPForm?"rgba(239,68,68,0.1)":"rgba(74,222,128,0.1)",color:showPForm?"#f87171":"#4ade80",cursor:"pointer",fontWeight:600}}>{showPForm?"✕ Cancel":"+ Add Player"}</button>
+            </div>
+            {showPForm&&(
+              <div onClick={e=>e.stopPropagation()} style={{background:"rgba(74,222,128,0.05)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:12,padding:14,marginBottom:14}}>
+                <Lbl c="#4ade80">Add Player</Lbl>
+                <div style={{display:"flex",gap:8,marginTop:6}}>
+                  <input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Player name" style={{...iS,flex:1}} onKeyDown={e=>e.key==="Enter"&&addPlayer()}/>
+                  <button onClick={addPlayer} disabled={!pName.trim()} style={{padding:"9px 16px",borderRadius:8,border:"none",background:pName.trim()?"linear-gradient(135deg,#16a34a,#4ade80)":"rgba(255,255,255,0.05)",color:pName.trim()?"#0a0e1a":"#4b5563",fontWeight:800,cursor:pName.trim()?"pointer":"not-allowed"}}>Add</button>
+                </div>
+              </div>
+            )}
+            {(players||[]).filter(p=>p&&p.id).map(p=>{
+              const paid=paidIds.has(p.id);const reg=isReg(p.name||"");
+              const g=(goals||[]).filter(x=>x&&x.scorerName===p.name).length;
+              const a=(goals||[]).filter(x=>x&&x.assistName===p.name).length;
+              const isLate=lateIds.has(p.id);
+              const currentSet=(playerSets||{})[p.id]!==undefined?(playerSets||{})[p.id]:"";
+              return(
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:10,marginBottom:7,background:paid?(reg?"rgba(167,139,250,0.07)":"rgba(74,222,128,0.06)"):"rgba(255,255,255,0.03)",border:`1px solid ${paid?(reg?"rgba(167,139,250,0.2)":"rgba(74,222,128,0.2)"):"rgba(255,255,255,0.06)"}`}}>
+                  <div style={{width:34,height:34,borderRadius:"50%",background:reg?"linear-gradient(135deg,#6d28d9,#a78bfa)":paid?"rgba(74,222,128,0.2)":"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:reg?"#fff":paid?"#4ade80":"#6b7280",flexShrink:0}}>{(p.name||"?").charAt(0).toUpperCase()}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:14,color:"#fff",marginBottom:3}}>{p.name}</div>
+                    <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+                      {paid?<span style={{fontSize:9,background:"rgba(74,222,128,0.15)",color:"#4ade80",borderRadius:4,padding:"1px 5px",fontWeight:700}}>✓ PAID</span>:<span style={{fontSize:9,background:"rgba(248,113,113,0.15)",color:"#f87171",borderRadius:4,padding:"1px 5px",fontWeight:700}}>UNPAID</span>}
+                      {reg&&<span style={{fontSize:9,background:"rgba(167,139,250,0.2)",color:"#a78bfa",borderRadius:4,padding:"1px 5px",fontWeight:700}}>REG</span>}
+                      {isLate&&<span style={{fontSize:9,background:"rgba(251,191,36,0.15)",color:"#fbbf24",borderRadius:4,padding:"1px 5px",fontWeight:700}}>LATE</span>}
+                      {g>0&&<span style={{fontSize:10,color:"#60a5fa"}}>⚽{g}</span>}
+                      {a>0&&<span style={{fontSize:10,color:"#a78bfa"}}>🅰{a}</span>}
+                    </div>
+                  </div>
+                  <select value={currentSet} onChange={e=>{const val=e.target.value==="sub"?"sub":(Number(e.target.value)||"");setPlayerSets(ps=>({...ps,[p.id]:val}));}} style={{...sS,width:currentSet==="sub"?80:70,fontSize:11,padding:"5px 22px 5px 8px",backgroundColor:currentSet==="sub"?"rgba(251,146,60,0.15)":"#1a2235",borderColor:currentSet==="sub"?"rgba(251,146,60,0.4)":"rgba(255,255,255,0.12)",color:currentSet==="sub"?"#fb923c":"#fff"}}>
+                    <option value="">Set?</option><option value="sub">🔄 SUB</option>
+                    {setNumbers.slice(0,8).map(n=><option key={n} value={n}>Set {n}</option>)}
+                  </select>
+                  <button onClick={()=>removePlayer(p.id)} style={{width:28,height:28,borderRadius:6,border:"none",background:"rgba(239,68,68,0.1)",color:"#ef4444",cursor:"pointer",fontSize:13}}>✕</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ══ MATCH ══ */}
+        {tab==="match"&&(
+          <div>
+            {/* ── INTELLIGENT STATS TABLE ─────────────────────────────── */}
+            {(()=>{
+              const nameSet=new Set();
+              (goals||[]).filter(g=>g).forEach(g=>{
+                if(g.scorerName)nameSet.add(g.scorerName.trim());
+                if(g.assistName)nameSet.add(g.assistName.trim());
+              });
+              (cards||[]).filter(c=>c).forEach(c=>{
+                if(c.playerName)nameSet.add(c.playerName.trim());
+              });
+
+              if(nameSet.size===0)return(
+                <div style={{textAlign:"center",padding:"32px 16px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:14,marginBottom:16}}>
+                  <div style={{fontSize:36,marginBottom:10}}>📊</div>
+                  <div style={{fontSize:13,color:"#6b7280"}}>Stats will appear here as you log goals and cards below</div>
+                </div>
+              );
+
+              const fmtDate=d=>{try{return new Date(d+"T12:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric"});}catch(e){return d||"";}};
+
+              const rows=Array.from(nameSet).map(name=>{
+                const playerGoals=(goals||[]).filter(x=>x&&x.scorerName&&x.scorerName.trim()===name);
+                const playerAssists=(goals||[]).filter(x=>x&&x.assistName&&x.assistName.trim()===name);
+                const yCards=(cards||[]).filter(x=>x&&x.playerName&&x.playerName.trim()===name&&x.type==="yellow");
+                const rCards=(cards||[]).filter(x=>x&&x.playerName&&x.playerName.trim()===name&&x.type==="red");
+                const yOwed=yCards.filter(c=>!c.paid).length*CARD_FINE.yellow;
+                const rOwed=rCards.filter(c=>!c.paid).length*CARD_FINE.red;
+                const totalOwed=yOwed+rOwed;
+                const allPaid=(yCards.length+rCards.length)>0&&totalOwed===0;
+                return{name,
+                  goals:playerGoals,assists:playerAssists,
+                  yCards,rCards,
+                  g:playerGoals.length,a:playerAssists.length,
+                  y:yCards.length,r:rCards.length,
+                  totalOwed,allPaid,hasCards:(yCards.length+rCards.length)>0
+                };
+              }).sort((a,b)=>(b.g+b.a)-(a.g+a.a)||a.name.localeCompare(b.name));
+
+              return(
+                <div style={{marginBottom:20}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>📊 Match Stats</div>
+                    <div style={{display:"flex",gap:10,fontSize:11,color:"#6b7280"}}>
+                      <span>⚽ {(goals||[]).length}</span>
+                      <span>🃏 {(cards||[]).length}</span>
+                    </div>
+                  </div>
+
+                  {/* Table header */}
+                  <div style={{borderRadius:14,border:"1px solid rgba(255,255,255,0.1)",overflow:"hidden"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 36px 36px 36px 36px 80px",background:"rgba(255,255,255,0.06)",padding:"9px 12px",gap:4,alignItems:"center"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#9ca3af",textTransform:"uppercase"}}>Player</div>
+                      <div style={{fontSize:16,textAlign:"center"}}>⚽</div>
+                      <div style={{fontSize:16,textAlign:"center"}}>🅰️</div>
+                      <div style={{width:14,height:18,borderRadius:2,background:"#fbbf24",margin:"0 auto"}}/>
+                      <div style={{width:14,height:18,borderRadius:2,background:"#ef4444",margin:"0 auto"}}/>
+                      <div style={{fontSize:10,fontWeight:700,color:"#9ca3af",textTransform:"uppercase",textAlign:"center"}}>Fines</div>
+                    </div>
+
+                    {rows.map((row,i)=>{
+                      const expanded=!!expandedRows[row.name];
+                      return(
+                        <div key={row.name}>
+                          <div onClick={()=>setExpandedRows(r=>({...r,[row.name]:!r[row.name]}))} style={{display:"grid",gridTemplateColumns:"1fr 36px 36px 36px 36px 80px",padding:"11px 12px",gap:4,alignItems:"center",background:i%2===0?"transparent":"rgba(255,255,255,0.02)",borderTop:"1px solid rgba(255,255,255,0.05)",cursor:"pointer"}}>
+                            <div style={{fontWeight:700,fontSize:13,color:"#e8eaf0",display:"flex",alignItems:"center",gap:5}}>
+                              {row.name}
+                              <span style={{fontSize:9,color:"#4b5563"}}>{expanded?"▲":"▼"}</span>
+                            </div>
+                            <div style={{textAlign:"center"}}>{row.g>0?<span style={{fontSize:13,fontWeight:800,color:"#60a5fa"}}>{row.g}</span>:<span style={{fontSize:12,color:"#374151"}}>—</span>}</div>
+                            <div style={{textAlign:"center"}}>{row.a>0?<span style={{fontSize:13,fontWeight:800,color:"#a78bfa"}}>{row.a}</span>:<span style={{fontSize:12,color:"#374151"}}>—</span>}</div>
+                            <div style={{textAlign:"center"}}>{row.y>0?<span style={{fontSize:13,fontWeight:800,color:"#fbbf24"}}>{row.y}</span>:<span style={{fontSize:12,color:"#374151"}}>—</span>}</div>
+                            <div style={{textAlign:"center"}}>{row.r>0?<span style={{fontSize:13,fontWeight:800,color:"#f87171"}}>{row.r}</span>:<span style={{fontSize:12,color:"#374151"}}>—</span>}</div>
+                            <div style={{textAlign:"center"}}>
+                              {!row.hasCards?<span style={{fontSize:11,color:"#374151"}}>—</span>
+                                :row.allPaid?<span style={{fontSize:11,fontWeight:700,color:"#4ade80",background:"rgba(74,222,128,0.12)",borderRadius:6,padding:"3px 7px"}}>✅ Paid</span>
+                                :<div><div style={{fontSize:11,fontWeight:800,color:"#f87171"}}>{N(row.totalOwed)}</div><div style={{fontSize:9,color:"#6b7280"}}>owed</div></div>
+                              }
+                            </div>
+                          </div>
+
+                          {/* Expanded date breakdown */}
+                          {expanded&&(
+                            <div style={{background:"rgba(255,255,255,0.04)",borderTop:"1px solid rgba(255,255,255,0.06)",padding:"10px 14px"}}>
+                              {row.goals.length>0&&(
+                                <div style={{marginBottom:8}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:"#60a5fa",textTransform:"uppercase",marginBottom:5}}>⚽ Goals</div>
+                                  {row.goals.map((g,gi)=>(
+                                    <div key={g.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:6,marginBottom:3,background:"rgba(96,165,250,0.06)",border:"1px solid rgba(96,165,250,0.12)"}}>
+                                      <div>
+                                        <span style={{fontSize:12,fontWeight:600}}>Goal {gi+1}</span>
+                                        {g.assistName&&<span style={{fontSize:11,color:"#a78bfa"}}> · assist: {g.assistName}</span>}
+                                        {g.isManual&&<span style={{fontSize:9,background:"rgba(251,191,36,0.2)",color:"#fbbf24",borderRadius:4,padding:"1px 5px",marginLeft:5,fontWeight:700}}>MANUAL</span>}
+                                      </div>
+                                      <div style={{fontSize:11,color:"#4ade80",fontWeight:600}}>{fmtDate(g.sessionDate||g.date)}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {row.assists.length>0&&(
+                                <div style={{marginBottom:8}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:"#a78bfa",textTransform:"uppercase",marginBottom:5}}>🅰️ Assists</div>
+                                  {row.assists.map((g,gi)=>(
+                                    <div key={g.id+"a"} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:6,marginBottom:3,background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.12)"}}>
+                                      <span style={{fontSize:12,fontWeight:600}}>Assist {gi+1} · scorer: {g.scorerName}</span>
+                                      <div style={{fontSize:11,color:"#a78bfa",fontWeight:600}}>{fmtDate(g.sessionDate||g.date)}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {(row.yCards.length>0||row.rCards.length>0)&&(
+                                <div>
+                                  <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",marginBottom:5}}>🃏 Cards</div>
+                                  {[...row.yCards,...row.rCards].map(c=>(
+                                    <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:6,marginBottom:3,background:c.type==="yellow"?"rgba(251,191,36,0.06)":"rgba(239,68,68,0.06)",border:`1px solid ${c.type==="yellow"?"rgba(251,191,36,0.18)":"rgba(239,68,68,0.18)"}`}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                        <div style={{width:10,height:14,borderRadius:2,background:c.type==="yellow"?"#fbbf24":"#ef4444"}}/>
+                                        <span style={{fontSize:12,fontWeight:600}}>{c.type==="yellow"?"Yellow":"Red"} · {N(CARD_FINE[c.type])}</span>
+                                        {c.paid&&<span style={{fontSize:9,color:"#4ade80",fontWeight:700}}>✅</span>}
+                                        {c.isManual&&<span style={{fontSize:9,background:"rgba(251,191,36,0.2)",color:"#fbbf24",borderRadius:4,padding:"1px 5px",fontWeight:700}}>MANUAL</span>}
+                                      </div>
+                                      <div style={{fontSize:11,color:"#fbbf24",fontWeight:600}}>{fmtDate(c.sessionDate||c.date)}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Totals footer */}
+                    {rows.length>0&&(
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 36px 36px 36px 36px 80px",padding:"10px 12px",gap:4,alignItems:"center",background:"rgba(255,255,255,0.05)",borderTop:"2px solid rgba(255,255,255,0.1)"}}>
+                        <div style={{fontSize:10,fontWeight:800,color:"#9ca3af",textTransform:"uppercase"}}>Total</div>
+                        <div style={{textAlign:"center",fontSize:13,fontWeight:800,color:"#60a5fa"}}>{rows.reduce((s,r)=>s+r.g,0)}</div>
+                        <div style={{textAlign:"center",fontSize:13,fontWeight:800,color:"#a78bfa"}}>{rows.reduce((s,r)=>s+r.a,0)}</div>
+                        <div style={{textAlign:"center",fontSize:13,fontWeight:800,color:"#fbbf24"}}>{rows.reduce((s,r)=>s+r.y,0)}</div>
+                        <div style={{textAlign:"center",fontSize:13,fontWeight:800,color:"#f87171"}}>{rows.reduce((s,r)=>s+r.r,0)}</div>
+                        <div style={{textAlign:"center",fontSize:11,fontWeight:800,color:rows.reduce((s,r)=>s+r.totalOwed,0)>0?"#f87171":"#4ade80"}}>{N(rows.reduce((s,r)=>s+r.totalOwed,0))}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Outstanding fines */}
+                  {rows.some(r=>r.hasCards&&!r.allPaid)&&(
+                    <div style={{marginTop:12,background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:12,padding:14}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#f87171",marginBottom:10}}>💳 Outstanding Card Fines</div>
+                      {(cards||[]).filter(c=>c&&!c.paid).map(c=>(
+                        <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:c.type==="yellow"?"rgba(251,191,36,0.07)":"rgba(239,68,68,0.07)",border:`1px solid ${c.type==="yellow"?"rgba(251,191,36,0.2)":"rgba(239,68,68,0.2)"}`,borderRadius:8,marginBottom:6}}>
+                          <div style={{width:16,height:22,borderRadius:2,background:c.type==="yellow"?"#fbbf24":"#ef4444",flexShrink:0}}/>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,fontWeight:700}}>{c.playerName}</div>
+                            <div style={{fontSize:10,color:"#6b7280"}}>{c.type==="yellow"?"Yellow":"Red"} · {N(CARD_FINE[c.type])} · {new Date((c.sessionDate||c.date)+"T12:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}</div>
+                          </div>
+                          <div style={{display:"flex",gap:5}}>
+                            <button onClick={()=>markCardPaid(c.id,"cash")} style={{padding:"5px 9px",borderRadius:6,border:"1px solid rgba(251,191,36,0.3)",background:"rgba(251,191,36,0.1)",color:"#fbbf24",cursor:"pointer",fontSize:11,fontWeight:600}}>💵 Cash</button>
+                            <button onClick={()=>markCardPaid(c.id,"transfer")} style={{padding:"5px 9px",borderRadius:6,border:"1px solid rgba(74,222,128,0.3)",background:"rgba(74,222,128,0.1)",color:"#4ade80",cursor:"pointer",fontSize:11,fontWeight:600}}>🏦 Bank</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── LOG GOAL ─────────────────────────────────────────────── */}
+            <div style={{background:"rgba(96,165,250,0.05)",border:"1px solid rgba(96,165,250,0.18)",borderRadius:14,padding:16,marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#60a5fa"}}>⚽ Log a Goal</div>
+                    <button onClick={()=>setManualGoal(m=>!m)} style={{fontSize:10,padding:"4px 10px",borderRadius:6,border:`1px solid ${manualGoal?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.15)"}`,background:manualGoal?"rgba(251,191,36,0.12)":"rgba(255,255,255,0.04)",color:manualGoal?"#fbbf24":"#6b7280",cursor:"pointer",fontWeight:600}}>
+                      {manualGoal?"📅 Manual ON":"📅 Manual"}
+                    </button>
+                  </div>
+                  {manualGoal&&(
+                    <div style={{marginBottom:10,background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:8,padding:"10px 12px"}}>
+                      <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:6}}>📅 MANUAL ENTRY — Pick the date this goal was scored</div>
+                      <input type="date" value={manualGoalDate} onChange={e=>setManualGoalDate(e.target.value)} style={{...iS,borderColor:"rgba(251,191,36,0.4)"}}/>
+                    </div>
+                  )}
+                  <div style={{marginBottom:8}}><Lbl>Scorer *</Lbl>
+                    <input value={gScorer} onChange={e=>setGScorer(e.target.value)} placeholder="Player name" style={iS} list="player-list"/>
+                    <datalist id="player-list">
+                      {(players||[]).filter(p=>p&&p.name).map(p=><option key={p.id} value={p.name}/>)}
+                      {(members||[]).filter(m=>m&&m.name).map(m=><option key={m.id} value={m.name}/>)}
+                    </datalist>
+                  </div>
+                  <div style={{marginBottom:12}}><Lbl>Assist (optional)</Lbl>
+                    <input value={gAssist} onChange={e=>setGAssist(e.target.value)} placeholder="Player name" style={iS} list="player-list"/>
+                  </div>
+                  {!manualGoal&&(
+                    <div style={{fontSize:10,color:"#4b5563",marginBottom:10,padding:"6px 10px",background:"rgba(255,255,255,0.03)",borderRadius:6}}>
+                      📅 Will record for: <span style={{color:"#60a5fa",fontWeight:700}}>{new Date(sessionDate+"T12:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"short",year:"numeric"})}</span>
+                    </div>
+                  )}
+                  <button onClick={()=>{
+                    if(!gScorer.trim())return;
+                    const entryDate=manualGoal?manualGoalDate:sessionDate;
+                    const newGoal={
+                      id:Date.now(),
+                      scorerName:gScorer.trim(),
+                      assistName:gAssist.trim()||null,
+                      sessionDate:entryDate,
+                      isManual:manualGoal,
+                      recordedAt:new Date().toISOString()
+                    };
+                    if(goalsRef.current)goalsRef.current.child(String(newGoal.id)).set(newGoal).catch(e=>console.error(e));
+                    setGoals(g=>[...g,newGoal]);
+                    setGScorer("");setGAssist("");
+                  }} disabled={!gScorer.trim()} style={{width:"100%",padding:"11px",borderRadius:9,border:"none",background:gScorer.trim()?"linear-gradient(135deg,#1d4ed8,#60a5fa)":"rgba(255,255,255,0.05)",color:gScorer.trim()?"#fff":"#4b5563",fontWeight:800,cursor:gScorer.trim()?"pointer":"not-allowed",fontSize:14}}>
+                    {manualGoal?"+ Log Goal (Manual Entry)":"+ Log Goal"}
+                  </button>
+            </div>
+
+            {/* ── ISSUE CARD ────────────────────────────────────────────── */}
+            <div style={{background:"rgba(251,191,36,0.05)",border:"1px solid rgba(251,191,36,0.18)",borderRadius:14,padding:16,marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#fbbf24"}}>🃏 Issue a Card</div>
+                    <button onClick={()=>setManualCard(m=>!m)} style={{fontSize:10,padding:"4px 10px",borderRadius:6,border:`1px solid ${manualCard?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.15)"}`,background:manualCard?"rgba(251,191,36,0.12)":"rgba(255,255,255,0.04)",color:manualCard?"#fbbf24":"#6b7280",cursor:"pointer",fontWeight:600}}>
+                      {manualCard?"📅 Manual ON":"📅 Manual"}
+                    </button>
+                  </div>
+                  {manualCard&&(
+                    <div style={{marginBottom:10,background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:8,padding:"10px 12px"}}>
+                      <div style={{fontSize:10,color:"#fbbf24",fontWeight:700,marginBottom:6}}>📅 MANUAL ENTRY — Pick the date this card was issued</div>
+                      <input type="date" value={manualCardDate} onChange={e=>setManualCardDate(e.target.value)} style={{...iS,borderColor:"rgba(251,191,36,0.4)"}}/>
+                    </div>
+                  )}
+                  <div style={{marginBottom:8}}><Lbl>Player Name *</Lbl>
+                    <input value={cName} onChange={e=>setCName(e.target.value)} placeholder="Player name" style={iS} list="player-list"/>
+                  </div>
+                  <div style={{display:"flex",gap:8,marginBottom:10}}>
+                    {["yellow","red"].map(type=>(
+                      <button key={type} onClick={()=>setCType(type)} style={{flex:1,padding:"10px",borderRadius:9,border:`1px solid ${cType===type?(type==="yellow"?"rgba(251,191,36,0.5)":"rgba(239,68,68,0.5)"):"rgba(255,255,255,0.07)"}`,background:cType===type?(type==="yellow"?"rgba(251,191,36,0.2)":"rgba(239,68,68,0.2)"):"rgba(255,255,255,0.04)",color:cType===type?(type==="yellow"?"#fbbf24":"#f87171"):"#6b7280",cursor:"pointer",fontWeight:700,fontSize:12}}>
+                        {type==="yellow"?`🟨 Yellow · ${N(CARD_FINE.yellow)}`:`🟥 Red · ${N(CARD_FINE.red)}`}
+                      </button>
+                    ))}
+                  </div>
+                  {!manualCard&&(
+                    <div style={{fontSize:10,color:"#4b5563",marginBottom:10,padding:"6px 10px",background:"rgba(255,255,255,0.03)",borderRadius:6}}>
+                      📅 Will record for: <span style={{color:"#fbbf24",fontWeight:700}}>{new Date(sessionDate+"T12:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"short",year:"numeric"})}</span>
+                    </div>
+                  )}
+                  <button onClick={()=>{
+                    if(!cName.trim())return;
+                    const entryDate=manualCard?manualCardDate:sessionDate;
+                    const newCard={
+                      id:Date.now(),
+                      playerName:cName.trim(),
+                      type:cType,
+                      paid:false,
+                      sessionDate:entryDate,
+                      isManual:manualCard,
+                      recordedAt:new Date().toISOString()
+                    };
+                    if(cardsRef.current)cardsRef.current.child(String(newCard.id)).set(newCard).catch(e=>console.error(e));
+                    setCards(c=>[...c,newCard]);setCName("");
+                  }} disabled={!cName.trim()} style={{width:"100%",padding:"11px",borderRadius:9,border:"none",background:cName.trim()?(cType==="yellow"?"linear-gradient(135deg,#92400e,#fbbf24)":"linear-gradient(135deg,#7f1d1d,#ef4444)"):"rgba(255,255,255,0.05)",color:cName.trim()?"#fff":"#4b5563",fontWeight:800,cursor:cName.trim()?"pointer":"not-allowed",fontSize:14}}>
+                    {manualCard?"+ Issue Card (Manual Entry)":"+ Issue Card"}
+                  </button>
+            </div>
+
+            {/* ── GOAL LOG (collapsible) ───────────────────────────────── */}
+            {(goals||[]).filter(g=>g&&g.id).length>0&&(
+              <details style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:14,marginBottom:8}}>
+                <summary style={{fontSize:12,fontWeight:700,color:"#6b7280",cursor:"pointer",listStyle:"none",display:"flex",justifyContent:"space-between"}}>
+                  <span>📋 Full Goal Log</span><span style={{color:"#4b5563"}}>{(goals||[]).length} entries ›</span>
+                </summary>
+                <div style={{marginTop:12}}>
+                  {(goals||[]).filter(g=>g&&g.id).sort((a,b)=>new Date(b.sessionDate||b.date)-new Date(a.sessionDate||a.date)).map((g,i)=>(
+                    <div key={g.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:7,marginBottom:4,background:"rgba(96,165,250,0.05)",border:"1px solid rgba(96,165,250,0.1)"}}>
+                      <span style={{color:"#4b5563",fontSize:11,width:18}}>{i+1}.</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:600}}>⚽ {g.scorerName}{g.assistName&&<span style={{color:"#a78bfa",fontWeight:400}}> 🅰 {g.assistName}</span>}</div>
+                        <div style={{fontSize:10,color:"#4ade80",marginTop:2,display:"flex",gap:6,alignItems:"center"}}>
+                          {new Date((g.sessionDate||g.date)+"T12:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"short",year:"numeric"})}
+                          {g.isManual&&<span style={{fontSize:9,background:"rgba(251,191,36,0.2)",color:"#fbbf24",borderRadius:4,padding:"1px 5px",fontWeight:700}}>MANUAL</span>}
+                        </div>
+                      </div>
+                      <button onClick={()=>{if(goalsRef.current)goalsRef.current.child(String(g.id)).remove().catch(e=>console.error(e));setGoals(gs=>gs.filter(x=>x&&x.id!==g.id));}} style={{width:22,height:22,background:"rgba(239,68,68,0.12)",border:"none",color:"#ef4444",borderRadius:5,cursor:"pointer",fontSize:10}}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+
+        {/* ══ PAYMENTS ══ */}
+        {tab==="payments"&&(
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+              {[{l:"Levy",v:N(sessionFee),c:"#6b7280"},{l:"Collected",v:N(trainingIncome),c:"#4ade80"},{l:"Unpaid Fines",v:`${unpaidCards.length}`,c:unpaidCards.length?"#f87171":"#4ade80"}].map(x=>(
+                <div key={x.l} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"11px 8px",textAlign:"center"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:x.c}}>{x.v}</div>
+                  <div style={{fontSize:9,color:"#6b7280",marginTop:3}}>{x.l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>{setShowGroupForm(f=>!f);setShowLateForm(false);}} style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1px solid ${showGroupForm?"rgba(239,68,68,0.4)":"rgba(96,165,250,0.35)"}`,background:showGroupForm?"rgba(239,68,68,0.1)":"rgba(96,165,250,0.1)",color:showGroupForm?"#f87171":"#60a5fa",cursor:"pointer",fontWeight:600,fontSize:11}}>{showGroupForm?"✕ Cancel":"👥 Group Pay"}</button>
+              <button onClick={()=>{setShowLateForm(f=>!f);setShowGroupForm(false);}} style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1px solid ${showLateForm?"rgba(239,68,68,0.4)":"rgba(251,191,36,0.35)"}`,background:showLateForm?"rgba(239,68,68,0.1)":"rgba(251,191,36,0.1)",color:showLateForm?"#f87171":"#fbbf24",cursor:"pointer",fontWeight:600,fontSize:11}}>{showLateForm?"✕ Cancel":`⏰ Late (${N(sessionFee+LATE_FEE)})`}</button>
+            </div>
+            {showGroupForm&&(
+              <div style={{background:"rgba(96,165,250,0.06)",border:"1px solid rgba(96,165,250,0.2)",borderRadius:12,padding:14,marginBottom:14}}>
+                <Lbl c="#60a5fa">Group Payment</Lbl>
+                <div style={{marginBottom:8,marginTop:6}}><Lbl>Payer</Lbl><select value={groupPayer} onChange={e=>setGroupPayer(e.target.value)} style={sS}><option value="">Select payer</option>{(players||[]).filter(p=>p&&p.id).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                <div style={{marginBottom:8}}><Lbl>Covers</Lbl>{(players||[]).filter(p=>p&&p.id).map(p=>(
+                  <label key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,marginBottom:4,background:groupCovered.includes(String(p.id))?"rgba(96,165,250,0.12)":"rgba(255,255,255,0.03)",border:`1px solid ${groupCovered.includes(String(p.id))?"rgba(96,165,250,0.3)":"rgba(255,255,255,0.06)"}`,cursor:"pointer"}}>
+                    <input type="checkbox" checked={groupCovered.includes(String(p.id))} onChange={e=>setGroupCovered(gc=>e.target.checked?[...gc,String(p.id)]:gc.filter(x=>x!==String(p.id)))} style={{accentColor:"#60a5fa"}}/>
+                    <span style={{fontSize:13}}>{p.name}</span>
+                  </label>
+                ))}</div>
+                {groupCovered.length>0&&groupPayer&&<div style={{fontSize:12,color:"#6b7280",marginBottom:10}}>Total: <span style={{color:"#4ade80",fontWeight:700}}>{N(groupCovered.length*sessionFee)}</span></div>}
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>recordGroup("cash")} disabled={!groupCovered.length||!groupPayer} style={{flex:1,padding:"11px",borderRadius:8,border:"1px solid rgba(251,191,36,0.3)",background:groupCovered.length&&groupPayer?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.03)",color:groupCovered.length&&groupPayer?"#fbbf24":"#4b5563",fontWeight:700,cursor:groupCovered.length&&groupPayer?"pointer":"not-allowed",fontSize:13}}>💵 Cash</button>
+                  <button onClick={()=>recordGroup("transfer")} disabled={!groupCovered.length||!groupPayer} style={{flex:1,padding:"11px",borderRadius:8,border:"1px solid rgba(74,222,128,0.3)",background:groupCovered.length&&groupPayer?"rgba(74,222,128,0.15)":"rgba(255,255,255,0.03)",color:groupCovered.length&&groupPayer?"#4ade80":"#4b5563",fontWeight:700,cursor:groupCovered.length&&groupPayer?"pointer":"not-allowed",fontSize:13}}>🏦 Transfer</button>
+                </div>
+              </div>
+            )}
+            {showLateForm&&(
+              <div style={{background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:12,padding:14,marginBottom:14}}>
+                <Lbl c="#fbbf24">Late Arrival — Levy + Surcharge = {N(sessionFee+LATE_FEE)} total</Lbl>
+                <div style={{marginBottom:8,marginTop:6}}><Lbl>Player</Lbl><select value={latePlayer} onChange={e=>setLatePlayer(e.target.value)} style={sS}><option value="">Who was late?</option>{(players||[]).filter(p=>p&&p.id).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+                <div style={{display:"flex",gap:8,marginBottom:10}}>{["cash","transfer"].map(m=><button key={m} onClick={()=>setLateMethod(m)} style={{flex:1,padding:"8px",borderRadius:7,border:`1px solid ${lateMethod===m?"rgba(251,191,36,0.4)":"rgba(255,255,255,0.07)"}`,background:lateMethod===m?"rgba(251,191,36,0.18)":"rgba(255,255,255,0.04)",color:lateMethod===m?"#fbbf24":"#6b7280",cursor:"pointer",fontWeight:600,fontSize:12}}>{m==="cash"?"💵 Cash":"🏦 Transfer"}</button>)}</div>
+                <button onClick={recordLate} disabled={!latePlayer} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:latePlayer?"linear-gradient(135deg,#92400e,#fbbf24)":"rgba(255,255,255,0.05)",color:latePlayer?"#0a0e1a":"#4b5563",fontWeight:800,cursor:latePlayer?"pointer":"not-allowed"}}>+ Record Late Fee</button>
+              </div>
+            )}
+            <SecHead color="#4ade80">Session Levies</SecHead>
+            {(players||[]).filter(p=>p&&p.id).map(p=>{
+              const paid=paidIds.has(p.id);const reg=isReg(p.name||"");
+              return(
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderRadius:10,marginBottom:7,background:paid?"rgba(74,222,128,0.07)":"rgba(255,255,255,0.03)",border:`1px solid ${paid?"rgba(74,222,128,0.2)":"rgba(255,255,255,0.06)"}`}}>
+                  <div style={{width:34,height:34,borderRadius:"50%",background:reg?"linear-gradient(135deg,#6d28d9,#a78bfa)":"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14,color:reg?"#fff":"#6b7280",flexShrink:0}}>{(p.name||"?").charAt(0).toUpperCase()}</div>
+                  <div style={{flex:1}}><div style={{fontWeight:600,fontSize:13}}>{p.name} {reg&&<span style={{fontSize:8,background:"rgba(167,139,250,0.2)",color:"#a78bfa",borderRadius:4,padding:"1px 4px"}}>REG</span>}</div><div style={{fontSize:11,color:paid?"#4ade80":"#f87171",fontWeight:600}}>{paid?`✓ ${N(sessionFee)} paid`:`Owes ${lateIds.has(p.id)?N(sessionFee+LATE_FEE):N(sessionFee)}`}</div></div>
+                  {!paid&&<div style={{display:"flex",gap:5}}><button onClick={()=>recordPay(p,"cash")} style={{padding:"6px 9px",borderRadius:7,border:"1px solid rgba(74,222,128,0.3)",background:"rgba(74,222,128,0.12)",color:"#4ade80",cursor:"pointer",fontSize:11,fontWeight:600}}>💵 Cash</button><button onClick={()=>setPayModal(p)} style={{padding:"6px 9px",borderRadius:7,border:"1px solid rgba(96,165,250,0.3)",background:"rgba(96,165,250,0.1)",color:"#60a5fa",cursor:"pointer",fontSize:11,fontWeight:600}}>🏦</button></div>}
+                </div>
+              );
+            })}
+            {(txns||[]).length>0&&(
+              <div style={{marginTop:20}}>
+                <SecHead color="#6b7280">Transaction Log</SecHead>
+                {[...(txns||[])].filter(t=>t&&t.id).reverse().map(t=>(
+                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:9,marginBottom:6}}>
+                    <span style={{fontSize:16}}>{t.method==="cash"?"💵":"🏦"}</span>
+                    <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{t.note}</div><div style={{fontSize:10,color:"#4b5563"}}>{t.date}</div></div>
+                    <span style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>+{N(t.amount)}</span>
+                    <button onClick={()=>{
+                    if(ledgerRef.current)ledgerRef.current.child(String(t.id)).update({deleted:true}).catch(e=>console.error(e));
+                    if(txnsRef.current)txnsRef.current.child(String(t.id)).update({deleted:true}).catch(e=>console.error(e));
+                    setTxns(tx=>tx.filter(x=>x&&x.id!==t.id));
+                    setLedger(l=>l.map(x=>x&&x.id===t.id?{...x,deleted:true}:x));
+                  }} style={{background:"rgba(239,68,68,0.1)",border:"none",color:"#ef4444",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:10}}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TRAINING ACCOUNT ══ */}
+        {tab==="training"&&(
+          <div>
+            <AccCard title="Training Account" icon="💵" color="74,222,128" income={trainingIncome} expenses={trainingExp} badge={`Balance: ${N(trainingBal)}`}/>
+
+            {/* Sub nav */}
+            <div style={{display:"flex",gap:6,marginBottom:16}}>
+              {[["overview","📊 Overview"],["ledger","📒 Ledger"],["expenses","💸 Expenses"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setFinView(id)} style={{flex:1,padding:"9px 4px",borderRadius:8,border:`1px solid ${finView===id?"rgba(74,222,128,0.4)":"rgba(255,255,255,0.08)"}`,background:finView===id?"rgba(74,222,128,0.15)":"rgba(255,255,255,0.03)",color:finView===id?"#4ade80":"#6b7280",cursor:"pointer",fontWeight:600,fontSize:11}}>{label}</button>
+              ))}
+            </div>
+
+            {/* OVERVIEW */}
+            {finView==="overview"&&(
+              <div>
+                <div style={{background:"rgba(74,222,128,0.06)",border:"1px solid rgba(74,222,128,0.18)",borderRadius:14,padding:16,marginBottom:14}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#4ade80",marginBottom:12}}>💰 Income Breakdown</div>
+                  {(()=>{
+                    const byType={};
+                    (txns||[]).filter(t=>t&&!t.deleted).forEach(t=>{const cat=t.category||"Other";byType[cat]=(byType[cat]||0)+(t.amount||0);});
+                    const total=Object.values(byType).reduce((s,v)=>s+v,0)||1;
+                    if(!Object.keys(byType).length)return <div style={{fontSize:12,color:"#374151"}}>No income yet</div>;
+                    return Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>(
+                      <div key={cat} style={{marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12,fontWeight:600}}>{cat}</span><span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{N(amt)}</span></div>
+                        <div style={{height:5,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#16a34a,#4ade80)",borderRadius:3,width:`${Math.round((amt/total)*100)}%`}}/></div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* FULL AUDIT LEDGER */}
+            {finView==="ledger"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>📒 Audit Ledger</div>
+                  {isDev&&<div style={{fontSize:10,background:"rgba(239,68,68,0.15)",color:"#f87171",borderRadius:6,padding:"3px 8px",fontWeight:700}}>🔴 DEV — showing all records</div>}
+                </div>
+
+                {/* Summary bar */}
+                {(()=>{
+                  const active=(ledger||[]).filter(e=>e&&!e.deleted&&e.account==="training"&&e.amount>0);
+                  const voided=(ledger||[]).filter(e=>e&&e.deleted&&e.account==="training"&&e.amount>0);
+                  const activeTotal=active.reduce((s,e)=>s+(e.amount||0),0);
+                  const voidedTotal=voided.reduce((s,e)=>s+(e.amount||0),0);
+                  return(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                      <div style={{background:"rgba(74,222,128,0.08)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+                        <div style={{fontSize:13,fontWeight:800,color:"#4ade80"}}>{N(activeTotal)}</div>
+                        <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>Active</div>
+                      </div>
+                      <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+                        <div style={{fontSize:13,fontWeight:800,color:"#f87171"}}>{N(voidedTotal)}</div>
+                        <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>Voided</div>
+                      </div>
+                      <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+                        <div style={{fontSize:13,fontWeight:800,color:"#fff"}}>{active.length+voided.length}</div>
+                        <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>Total entries</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Ledger rows */}
+                {(()=>{
+                  const entries=(ledger||[])
+                    .filter(e=>e&&e.account==="training")
+                    .filter(e=>isDev?true:!e.deleted)
+                    .sort((a,b)=>b.id-a.id);
+                  if(!entries.length)return <div style={{textAlign:"center",color:"#374151",padding:"30px 0",fontSize:13}}>No transactions yet</div>;
+                  return entries.map(e=>(
+                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:9,marginBottom:6,background:e.deleted?"rgba(239,68,68,0.04)":"rgba(255,255,255,0.03)",border:`1px solid ${e.deleted?"rgba(239,68,68,0.2)":"rgba(255,255,255,0.07)"}`,opacity:e.deleted?0.6:1}}>
+                      <span style={{fontSize:15}}>{e.method==="cash"?"💵":e.method==="transfer"?"🏦":e.method==="expense"?"💸":e.method==="void"?"🚫":"📝"}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:600,textDecoration:e.deleted?"line-through":"none",color:e.deleted?"#6b7280":"#e8eaf0"}}>{e.note}</div>
+                        <div style={{fontSize:10,color:"#4b5563",display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <span>{e.date}</span>
+                          <span>{e.category}</span>
+                          {e.deleted&&<span style={{color:"#f87171",fontWeight:700}}>VOID</span>}
+                        </div>
+                      </div>
+                      <span style={{fontSize:13,fontWeight:700,color:e.deleted?"#6b7280":e.amount>0?"#4ade80":"#f87171"}}>{e.amount>0?"+":""}{N(e.amount)}</span>
+                      {isDev&&e.deleted&&(
+                        <button onClick={()=>{
+                          if(ledgerRef.current)ledgerRef.current.child(String(e.id)).update({deleted:false}).catch(err=>console.error(err));
+                          setLedger(l=>l.map(x=>x&&x.id===e.id?{...x,deleted:false}:x));
+                        }} style={{padding:"4px 8px",borderRadius:5,border:"1px solid rgba(74,222,128,0.3)",background:"rgba(74,222,128,0.1)",color:"#4ade80",cursor:"pointer",fontSize:10,fontWeight:700}}>Restore</button>
+                      )}
+                      {isDev&&(
+                        <button onClick={()=>{
+                          if(window.confirm("Permanently wipe this entry?")){
+                            if(ledgerRef.current)ledgerRef.current.child(String(e.id)).remove().catch(err=>console.error(err));
+                            setLedger(l=>l.filter(x=>x&&x.id!==e.id));
+                          }
+                        }} style={{padding:"4px 8px",borderRadius:5,border:"1px solid rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.1)",color:"#f87171",cursor:"pointer",fontSize:10}}>🗑</button>
+                      )}
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+
+            {/* TRAINING EXPENSES */}
+            {finView==="expenses"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#f87171"}}>💸 Training Expenses <span style={{fontSize:11,fontWeight:400}}>({N(trainingExp)})</span></div>
+                  <button onClick={()=>setShowTxForm(f=>!f)} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:`1px solid ${showTxForm?"rgba(239,68,68,0.4)":"rgba(248,113,113,0.4)"}`,background:"rgba(248,113,113,0.1)",color:"#f87171",cursor:"pointer",fontWeight:600}}>{showTxForm?"✕ Cancel":"+ Add"}</button>
+                </div>
+                {showTxForm&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{marginBottom:8}}><Lbl>Description *</Lbl><input value={txDesc} onChange={e=>setTxDesc(e.target.value)} placeholder="e.g. Pitch hire" style={iS}/></div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <div><Lbl>Amount (₦) *</Lbl><input type="number" value={txAmt} onChange={e=>setTxAmt(e.target.value)} placeholder="0" style={iS}/></div>
+                      <div><Lbl>Date</Lbl><input type="date" value={txDate} onChange={e=>setTxDate(e.target.value)} style={iS}/></div>
+                    </div>
+                    <div style={{marginBottom:10}}><Lbl>Category</Lbl><select value={txCat} onChange={e=>setTxCat(e.target.value)} style={sS}>{EXP_CATS_TRAINING.map(c=><option key={c}>{c}</option>)}</select></div>
+                    <button onClick={addTrainingExpense} disabled={!txDesc.trim()||!txAmt} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:txDesc.trim()&&txAmt?"linear-gradient(135deg,#7f1d1d,#ef4444)":"rgba(255,255,255,0.05)",color:txDesc.trim()&&txAmt?"#fff":"#4b5563",fontWeight:800,cursor:txDesc.trim()&&txAmt?"pointer":"not-allowed"}}>+ Record Training Expense</button>
+                  </div>
+                )}
+                {(trainingExpenses||[]).filter(e=>e&&e.id).length===0&&!showTxForm&&<div style={{fontSize:12,color:"#374151",padding:"20px 0",textAlign:"center"}}>No training expenses yet</div>}
+                {[...(trainingExpenses||[])].filter(e=>e&&e.id).reverse().map(e=>(
+                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.12)",borderRadius:9,marginBottom:6}}>
+                    <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{e.desc}</div><div style={{fontSize:10,color:"#6b7280"}}>{e.category} · {e.date?new Date(e.date+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}):""}</div></div>
+                    <span style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{N(e.amount)}</span>
+                    <button onClick={()=>{
+                      const entry={id:e.id,date:e.date,timestamp:new Date().toISOString(),deleted:true,type:"expense_void",amount:-e.amount,note:`VOID: ${e.desc}`,category:e.category,account:"training",method:"void"};
+                      if(ledgerRef.current)ledgerRef.current.child(String(entry.id)+"_void").set(entry).catch(err=>console.error(err));
+                      setTrainingExpenses(ex=>ex.filter(x=>x&&x.id!==e.id));
+                    }} style={{background:"rgba(239,68,68,0.1)",border:"none",color:"#ef4444",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:11}}>✕</button>
+                  </div>
+                ))}
+                <div style={{background:trainingBal>=0?"rgba(74,222,128,0.08)":"rgba(239,68,68,0.08)",border:`1px solid ${trainingBal>=0?"rgba(74,222,128,0.25)":"rgba(239,68,68,0.25)"}`,borderRadius:12,padding:14,textAlign:"center",marginTop:14}}>
+                  <div style={{fontSize:11,color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Training Balance</div>
+                  <div style={{fontSize:32,fontWeight:800,color:trainingBal>=0?"#4ade80":"#f87171"}}>{N(trainingBal)}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ DONATIONS ══ */}
+        {tab==="donations"&&(
+          <div>
+            <AccCard title="Donation Account" icon="🤝" color="251,191,36" income={donGrandTotal} expenses={donationExp} badge={`${(donors||[]).length} Pioneers`}/>
+
+            {/* Sub nav */}
+            <div style={{display:"flex",gap:6,marginBottom:16}}>
+              {[["tracker","📊 Tracker"],["expenses","💸 Expenses"],["summary","📋 Summary"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setDonView(id)} style={{flex:1,padding:"9px 4px",borderRadius:8,border:`1px solid ${donView===id?"rgba(251,191,36,0.4)":"rgba(255,255,255,0.08)"}`,background:donView===id?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.03)",color:donView===id?"#fbbf24":"#6b7280",cursor:"pointer",fontWeight:600,fontSize:11}}>{label}</button>
+              ))}
+            </div>
+
+            {/* TRACKER */}
+            {donView==="tracker"&&(
+              <div>
+                <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}>
+                  <select value={donYear} onChange={e=>setDonYear(Number(e.target.value))} style={{...sS,flex:1}}>{[2024,2025,2026,2027,2028].map(y=><option key={y} value={y}>{y}</option>)}</select>
+                  <button onClick={()=>setShowDonorForm(f=>!f)} style={{flexShrink:0,fontSize:11,padding:"9px 14px",borderRadius:8,border:`1px solid ${showDonorForm?"rgba(239,68,68,0.4)":"rgba(251,191,36,0.4)"}`,background:showDonorForm?"rgba(239,68,68,0.1)":"rgba(251,191,36,0.1)",color:showDonorForm?"#f87171":"#fbbf24",cursor:"pointer",fontWeight:700}}>{showDonorForm?"✕ Cancel":"+ Add Pioneer"}</button>
+                </div>
+                {showDonorForm&&(
+                  <div style={{background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:12,padding:14,marginBottom:14}}>
+                    <div style={{display:"flex",gap:8}}>
+                      <input value={donorName} onChange={e=>setDonorName(e.target.value)} placeholder="Pioneer name" style={{...iS,flex:1}} onKeyDown={e=>{if(e.key==="Enter"&&donorName.trim()){
+                      const nd={id:Date.now(),name:donorName.trim(),deleted:false};
+                      if(donorsRef.current)donorsRef.current.child(String(nd.id)).set(nd).catch(e=>console.error(e));
+                      setDonors(d=>[...d,nd]);setDonorName("");setShowDonorForm(false);}}}/>
+                      <button onClick={()=>{if(!donorName.trim())return;
+                      const nd={id:Date.now(),name:donorName.trim(),deleted:false};
+                      if(donorsRef.current)donorsRef.current.child(String(nd.id)).set(nd).catch(e=>console.error(e));
+                      setDonors(d=>[...d,nd]);setDonorName("");setShowDonorForm(false);}} disabled={!donorName.trim()} style={{padding:"9px 16px",borderRadius:8,border:"none",background:donorName.trim()?"linear-gradient(135deg,#92400e,#fbbf24)":"rgba(255,255,255,0.05)",color:donorName.trim()?"#0a0e1a":"#4b5563",fontWeight:800,cursor:donorName.trim()?"pointer":"not-allowed"}}>Add</button>
+                    </div>
+                  </div>
+                )}
+                {(donors||[]).length===0&&<div style={{textAlign:"center",color:"#374151",padding:"40px 0",fontSize:13}}>No pioneer members yet</div>}
+                {(donors||[]).length>0&&(
+                  <div style={{overflowX:"auto",borderRadius:12,border:"1px solid rgba(255,255,255,0.08)"}}>
+                    <table style={{borderCollapse:"collapse",minWidth:800,width:"100%"}}>
+                      <thead>
+                        <tr style={{background:"rgba(251,191,36,0.1)"}}>
+                          <th style={{padding:"10px 12px",textAlign:"left",fontSize:11,color:"#fbbf24",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid rgba(255,255,255,0.08)",position:"sticky",left:0,background:"#111827",minWidth:110}}>Pioneer</th>
+                          {MONTHS.map(m=><th key={m} style={{padding:"10px 8px",fontSize:10,color:"#fbbf24",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid rgba(255,255,255,0.08)",textAlign:"center",minWidth:60}}>{m}</th>)}
+                          <th style={{padding:"10px 10px",fontSize:10,color:"#4ade80",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid rgba(255,255,255,0.08)",textAlign:"center",minWidth:76,background:"rgba(74,222,128,0.06)"}}>Total</th>
+                          <th style={{minWidth:32,borderBottom:"1px solid rgba(255,255,255,0.08)"}}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(donors||[]).filter(d=>d&&d.id).map((donor,di)=>(
+                          <tr key={donor.id} style={{background:di%2===0?"transparent":"rgba(255,255,255,0.02)"}}>
+                            <td style={{padding:"9px 12px",fontSize:13,fontWeight:600,borderBottom:"1px solid rgba(255,255,255,0.05)",position:"sticky",left:0,background:di%2===0?"#0a0e1a":"#0d1220",whiteSpace:"nowrap"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <div style={{width:24,height:24,borderRadius:"50%",background:"linear-gradient(135deg,#92400e,#fbbf24)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:11,color:"#0a0e1a",flexShrink:0}}>{donor.name.charAt(0).toUpperCase()}</div>
+                                {donor.name}
+                              </div>
+                            </td>
+                            {MONTHS.map(month=>{
+                              const val=((donations||{})[donor.id]||{})[month]||0;
+                              const isEditing=editingCell&&editingCell.donorId===donor.id&&editingCell.month===month;
+                              return(
+                                <td key={month} style={{padding:"4px",textAlign:"center",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                                  {isEditing?(
+                                    <input autoFocus type="number" value={cellValue} onChange={e=>setCellValue(e.target.value)} onBlur={commitEdit} onKeyDown={e=>{if(e.key==="Enter")commitEdit();if(e.key==="Escape"){setEditingCell(null);setCellValue("");}}} style={{width:56,background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.5)",borderRadius:6,padding:"4px 6px",color:"#fbbf24",fontSize:12,textAlign:"center",outline:"none"}}/>
+                                  ):(
+                                    <div onClick={()=>startEdit(donor.id,month)} style={{cursor:"pointer",padding:"5px 4px",borderRadius:6,minHeight:28,display:"flex",alignItems:"center",justifyContent:"center",background:val>0?"rgba(74,222,128,0.1)":"rgba(255,255,255,0.03)",border:`1px solid ${val>0?"rgba(74,222,128,0.2)":"rgba(255,255,255,0.06)"}`,fontSize:11,fontWeight:val>0?700:400,color:val>0?"#4ade80":"#374151"}}>
+                                      {val>0?`₦${val.toLocaleString()}`:"—"}
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td style={{padding:"9px 10px",textAlign:"center",borderBottom:"1px solid rgba(255,255,255,0.05)",background:"rgba(74,222,128,0.05)"}}>
+                              <span style={{fontSize:12,fontWeight:800,color:"#4ade80"}}>₦{donRowTotal(donor.id).toLocaleString()}</span>
+                            </td>
+                            <td style={{padding:"4px 6px",textAlign:"center",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                              <button onClick={()=>{
+                            if(donorsRef.current)donorsRef.current.child(String(donor.id)).update({deleted:true}).catch(e=>console.error(e));
+                            setDonors(d=>d.filter(x=>x&&x.id!==donor.id));
+                          }} style={{width:24,height:24,borderRadius:5,border:"none",background:"rgba(239,68,68,0.12)",color:"#ef4444",cursor:"pointer",fontSize:11}}>✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{background:"rgba(74,222,128,0.06)",borderTop:"2px solid rgba(74,222,128,0.2)"}}>
+                          <td style={{padding:"10px 12px",fontSize:11,fontWeight:800,color:"#4ade80",textTransform:"uppercase",position:"sticky",left:0,background:"rgba(74,222,128,0.08)"}}>Monthly</td>
+                          {MONTHS.map(m=><td key={m} style={{padding:"9px 4px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,color:donColTotal(m)>0?"#4ade80":"#374151"}}>{donColTotal(m)>0?`₦${donColTotal(m).toLocaleString()}`:"—"}</span></td>)}
+                          <td style={{padding:"9px 10px",textAlign:"center",background:"rgba(74,222,128,0.15)"}}><span style={{fontSize:13,fontWeight:800,color:"#4ade80"}}>₦{donGrandTotal.toLocaleString()}</span></td>
+                          <td/>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {(donors||[]).length>0&&<div style={{marginTop:10,fontSize:11,color:"#4b5563",textAlign:"center"}}>Tap any cell to enter/edit · Press Enter to save</div>}
+              </div>
+            )}
+
+            {/* DONATION EXPENSES */}
+            {donView==="expenses"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                  <div style={{fontSize:13,color:"#6b7280"}}>Total: {N(donationExp)}</div>
+                  <button onClick={()=>setShowDxForm(f=>!f)} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:`1px solid ${showDxForm?"rgba(239,68,68,0.4)":"rgba(248,113,113,0.4)"}`,background:"rgba(248,113,113,0.1)",color:"#f87171",cursor:"pointer",fontWeight:600}}>{showDxForm?"✕ Cancel":"+ Add Expense"}</button>
+                </div>
+                {showDxForm&&(
+                  <div style={{background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:12,padding:14,marginBottom:14}}>
+                    <div style={{marginBottom:8}}><Lbl>Description *</Lbl><input value={dxDesc} onChange={e=>setDxDesc(e.target.value)} placeholder="e.g. Club jerseys" style={iS}/></div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <div><Lbl>Amount (₦) *</Lbl><input type="number" value={dxAmt} onChange={e=>setDxAmt(e.target.value)} placeholder="0" style={iS}/></div>
+                      <div><Lbl>Date</Lbl><input type="date" value={dxDate} onChange={e=>setDxDate(e.target.value)} style={iS}/></div>
+                    </div>
+                    <div style={{marginBottom:10}}><Lbl>Category</Lbl><select value={dxCat} onChange={e=>setDxCat(e.target.value)} style={sS}>{EXP_CATS_DONATION.map(c=><option key={c}>{c}</option>)}</select></div>
+                    <button onClick={addDonationExpense} disabled={!dxDesc.trim()||!dxAmt} style={{width:"100%",padding:"10px",borderRadius:8,border:"none",background:dxDesc.trim()&&dxAmt?"linear-gradient(135deg,#7f1d1d,#ef4444)":"rgba(255,255,255,0.05)",color:dxDesc.trim()&&dxAmt?"#fff":"#4b5563",fontWeight:800,cursor:dxDesc.trim()&&dxAmt?"pointer":"not-allowed"}}>+ Record Donation Expense</button>
+                  </div>
+                )}
+                {(donationExpenses||[]).filter(e=>e&&e.id).length===0&&!showDxForm&&<div style={{textAlign:"center",color:"#374151",padding:"30px 0"}}>No donation expenses yet</div>}
+                {[...(donationExpenses||[])].filter(e=>e&&e.id).reverse().map(e=>(
+                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.15)",borderRadius:10,marginBottom:8}}>
+                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{e.desc}</div><div style={{fontSize:10,color:"#6b7280"}}>{e.category} · {e.date?new Date(e.date+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}):""}</div></div>
+                    <span style={{fontSize:14,fontWeight:800,color:"#f87171"}}>-{N(e.amount)}</span>
+                    <button onClick={()=>{
+                    const entry={id:e.id,date:e.date,timestamp:new Date().toISOString(),deleted:true,type:"expense_void",amount:-e.amount,note:`VOID: ${e.desc}`,category:e.category,account:"donation",method:"void"};
+                    if(ledgerRef.current)ledgerRef.current.child(String(entry.id)+"_void").set(entry).catch(err=>console.error(err));
+                    setDonationExpenses(ex=>ex.filter(x=>x&&x.id!==e.id));
+                  }} style={{background:"rgba(239,68,68,0.1)",border:"none",color:"#ef4444",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:11}}>✕</button>
+                  </div>
+                ))}
+                <div style={{background:donationBal>=0?"rgba(74,222,128,0.08)":"rgba(239,68,68,0.08)",border:`1px solid ${donationBal>=0?"rgba(74,222,128,0.25)":"rgba(239,68,68,0.25)"}`,borderRadius:12,padding:14,textAlign:"center",marginTop:14}}>
+                  <div style={{fontSize:11,color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Donation Account Balance</div>
+                  <div style={{fontSize:32,fontWeight:800,color:donationBal>=0?"#4ade80":"#f87171"}}>{N(donationBal)}</div>
+                </div>
+              </div>
+            )}
+
+            {/* DONATION SUMMARY */}
+            {donView==="summary"&&(
+              <div>
+                <div style={{background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:14,padding:16,marginBottom:14}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#fbbf24",marginBottom:12}}>Per Pioneer</div>
+                  {(donors||[]).filter(d=>d&&d.id).map(d=>{
+                    const total=donRowTotal(d.id);
+                    const paid=MONTHS.filter(m=>((donations||{})[d.id]||{})[m]>0);
+                    return(
+                      <div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(251,191,36,0.1)",borderRadius:8,marginBottom:6}}>
+                        <div><div style={{fontSize:13,fontWeight:700}}>{d.name}</div><div style={{fontSize:10,color:"#6b7280"}}>{paid.length} month{paid.length!==1?"s":""}{paid.length>0?": "+paid.join(", "):""}</div></div>
+                        <div style={{fontSize:13,fontWeight:800,color:total>0?"#fbbf24":"#374151"}}>{total>0?N(total):"—"}</div>
+                      </div>
+                    );
+                  })}
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"10px 12px",background:"rgba(251,191,36,0.12)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:8,marginTop:8}}>
+                    <span style={{fontSize:13,fontWeight:800,color:"#fbbf24"}}>Total Donated</span>
+                    <span style={{fontSize:14,fontWeight:800,color:"#fbbf24"}}>{N(donGrandTotal)}</span>
+                  </div>
+                </div>
+                <div style={{background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.18)",borderRadius:14,padding:16,marginBottom:14}}>
+                  <div style={{fontSize:13,fontWeight:800,color:"#f87171",marginBottom:12}}>Donation Expenses: {N(donationExp)}</div>
+                  {(()=>{
+                    const byCategory={};
+                    (donationExpenses||[]).filter(e=>e).forEach(e=>{byCategory[e.category]=(byCategory[e.category]||0)+e.amount;});
+                    const total=donationExp||1;
+                    return Object.entries(byCategory).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>(
+                      <div key={cat} style={{marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12,fontWeight:600}}>{cat}</span><span style={{fontSize:12,fontWeight:700,color:"#f87171"}}>{N(amt)}</span></div>
+                        <div style={{height:5,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:"linear-gradient(90deg,#7f1d1d,#ef4444)",borderRadius:3,width:`${Math.round((amt/total)*100)}%`}}/></div>
+                      </div>
+                    ));
+                  })()}
+                  {(donationExpenses||[]).length===0&&<div style={{fontSize:12,color:"#374151"}}>No donation expenses yet</div>}
+                </div>
+                <div style={{background:donationBal>=0?"rgba(74,222,128,0.1)":"rgba(239,68,68,0.1)",border:`1px solid ${donationBal>=0?"rgba(74,222,128,0.3)":"rgba(239,68,68,0.3)"}`,borderRadius:12,padding:16,textAlign:"center"}}>
+                  <div style={{fontSize:11,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Donation Account Balance</div>
+                  <div style={{fontSize:36,fontWeight:800,color:donationBal>=0?"#4ade80":"#f87171"}}>{N(donationBal)}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+                    <div style={{fontSize:11,color:"#6b7280"}}>Donated<div style={{fontSize:14,fontWeight:700,color:"#fbbf24"}}>{N(donGrandTotal)}</div></div>
+                    <div style={{fontSize:11,color:"#6b7280"}}>Spent<div style={{fontSize:14,fontWeight:700,color:"#f87171"}}>{N(donationExp)}</div></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ NOTES ══ */}
+        {tab==="notes"&&(
+          <div>
+            <div style={{marginBottom:16}}><Lbl>Session Notes</Lbl><textarea value={sessionNote} onChange={e=>setSessionNote(e.target.value)} placeholder="Tactics, observations..." rows={4} style={{...iS,marginTop:6,resize:"vertical",lineHeight:1.6}}/></div>
+            <Lbl>Player Notes</Lbl>
+            {(players||[]).length===0&&<div style={{textAlign:"center",color:"#374151",padding:"20px 0"}}>Add players first</div>}
+            {(players||[]).filter(p=>p&&p.id).map(p=>(
+              <div key={p.id} style={{marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                  <div style={{width:26,height:26,borderRadius:"50%",background:isReg(p.name||"")?"linear-gradient(135deg,#6d28d9,#a78bfa)":"rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:"#fff"}}>{(p.name||"?").charAt(0).toUpperCase()}</div>
+                  <span style={{fontSize:13,fontWeight:600}}>{p.name}</span>
+                </div>
+                <input value={(pNotes||{})[p.id]||""} onChange={e=>setPNotes(n=>({...n,[p.id]:e.target.value}))} placeholder={`Notes for ${(p.name||"").split(" ")[0]}...`} style={iS}/>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ══ HISTORY ══ */}
+        {tab==="history"&&(
+          <div>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>📅 Session History <span style={{background:"rgba(255,255,255,0.08)",color:"#9ca3af",borderRadius:6,padding:"2px 9px",fontSize:12}}>{(sessionHistory||[]).length}</span></div>
+
+            {/* ── COMBINED ACCOUNT SUMMARY ── */}
+            <div style={{background:"linear-gradient(135deg,rgba(74,222,128,0.06),rgba(251,191,36,0.04))",border:"1px solid rgba(74,222,128,0.18)",borderRadius:14,padding:18,marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#4ade80",marginBottom:14}}>💰 Club Finance — All Time</div>
+
+              {/* Training account */}
+              {(()=>{
+                const allTxns=[...(txns||[]),...(sessionHistory||[]).flatMap(s=>s.txns||[])];
+                const allTExp=[...(trainingExpenses||[]),...(sessionHistory||[]).flatMap(s=>s.trainingExpenses||[])];
+                const tInc=allTxns.filter(t=>t).reduce((s,t)=>s+(t.amount||0),0);
+                const tExp=allTExp.filter(e=>e).reduce((s,e)=>s+(e.amount||0),0);
+                const tBal=tInc-tExp;
+                return(
+                  <AccCard title="Training Account" icon="💵" color="74,222,128" income={tInc} expenses={tExp} badge={`${(sessionHistory||[]).length} sessions`}/>
+                );
+              })()}
+
+              {/* Donation account */}
+              {(()=>{
+                const allDExp=[...(donationExpenses||[]),...(sessionHistory||[]).flatMap(s=>s.donationExpenses||[])];
+                const dExp=allDExp.filter(e=>e).reduce((s,e)=>s+(e.amount||0),0);
+                return(
+                  <AccCard title="Donation Account" icon="🤝" color="251,191,36" income={donGrandTotal} expenses={dExp} badge={`${(donors||[]).length} pioneers`}/>
+                );
+              })()}
+
+              {/* Donations breakdown */}
+              {donGrandTotal>0&&(
+                <div style={{background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",borderRadius:12,padding:14,marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#fbbf24",marginBottom:10}}>🤝 Pioneer Donations</div>
+                  {(donors||[]).filter(d=>d&&d.id).map(d=>{
+                    const total=donRowTotal(d.id);
+                    const paidM=MONTHS.filter(m=>((donations||{})[d.id]||{})[m]>0);
+                    if(total===0)return null;
+                    return(
+                      <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"7px 10px",background:"rgba(255,255,255,0.02)",borderRadius:6,marginBottom:4}}>
+                        <div><div style={{fontSize:12,fontWeight:700}}>{d.name}</div><div style={{fontSize:10,color:"#6b7280"}}>{paidM.join(", ")}</div></div>
+                        <div style={{fontSize:12,fontWeight:800,color:"#fbbf24"}}>{N(total)}</div>
+                      </div>
+                    );
+                  })}
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:6,marginTop:6}}>
+                    <span style={{fontSize:12,fontWeight:800,color:"#fbbf24"}}>Grand Total</span>
+                    <span style={{fontSize:13,fontWeight:800,color:"#fbbf24"}}>{N(donGrandTotal)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Donation expenses breakdown */}
+              {(donationExpenses||[]).length>0&&(
+                <div style={{background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.15)",borderRadius:12,padding:14,marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#f87171",marginBottom:10}}>💸 Donation Expenses: {N(donationExp)}</div>
+                  {(()=>{
+                    const byCategory={};
+                    (donationExpenses||[]).filter(e=>e).forEach(e=>{byCategory[e.category]=(byCategory[e.category]||0)+e.amount;});
+                    return Object.entries(byCategory).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>(
+                      <div key={cat} style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",background:"rgba(255,255,255,0.02)",borderRadius:6,marginBottom:4}}>
+                        <span style={{fontSize:12}}>{cat}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:"#f87171"}}>{N(amt)}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+
+              {/* Overall club balance */}
+              {(()=>{
+                const allTxns=[...(txns||[]),...(sessionHistory||[]).flatMap(s=>s.txns||[])];
+                const allTExp=[...(trainingExpenses||[]),...(sessionHistory||[]).flatMap(s=>s.trainingExpenses||[])];
+                const allDExp=[...(donationExpenses||[]),...(sessionHistory||[]).flatMap(s=>s.donationExpenses||[])];
+                const tBal=allTxns.filter(t=>t).reduce((s,t)=>s+(t.amount||0),0)-allTExp.filter(e=>e).reduce((s,e)=>s+(e.amount||0),0);
+                const dBal=donGrandTotal-allDExp.filter(e=>e).reduce((s,e)=>s+(e.amount||0),0);
+                const total=tBal+dBal;
+                return(
+                  <div style={{background:total>=0?"rgba(74,222,128,0.1)":"rgba(239,68,68,0.1)",border:`1px solid ${total>=0?"rgba(74,222,128,0.3)":"rgba(239,68,68,0.3)"}`,borderRadius:12,padding:14,textAlign:"center"}}>
+                    <div style={{fontSize:11,color:"#9ca3af",fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Total Club Balance</div>
+                    <div style={{fontSize:36,fontWeight:800,color:total>=0?"#4ade80":"#f87171"}}>{N(total)}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+                      <div style={{fontSize:10,color:"#6b7280"}}>Training<div style={{fontSize:13,fontWeight:700,color:tBal>=0?"#4ade80":"#f87171"}}>{N(tBal)}</div></div>
+                      <div style={{fontSize:10,color:"#6b7280"}}>Donations<div style={{fontSize:13,fontWeight:700,color:dBal>=0?"#fbbf24":"#f87171"}}>{N(dBal)}</div></div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Download report */}
+            {(sessionHistory||[]).length>0&&(
+              <div style={{background:"rgba(96,165,250,0.06)",border:"1px solid rgba(96,165,250,0.2)",borderRadius:14,padding:18,marginBottom:14}}>
+                <div style={{fontSize:13,fontWeight:800,color:"#60a5fa",marginBottom:14}}>📥 Download Report</div>
+                <div style={{marginBottom:12}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                    {[{v:"all",l:"📋 All"},{v:"sessions",l:"🔢 Last N"},{v:"day",l:"📅 By Date"},{v:"month",l:"🗓 By Month"}].map(opt=>(
+                      <button key={opt.v} onClick={()=>setDlFilter(opt.v)} style={{padding:"9px 10px",borderRadius:8,border:`1px solid ${dlFilter===opt.v?"rgba(96,165,250,0.6)":"rgba(255,255,255,0.1)"}`,background:dlFilter===opt.v?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.04)",color:dlFilter===opt.v?"#60a5fa":"#9ca3af",cursor:"pointer",fontSize:12,fontWeight:dlFilter===opt.v?700:400}}>{opt.l}</button>
+                    ))}
+                  </div>
+                </div>
+                {dlFilter==="day"&&<div style={{marginBottom:12}}><input type="date" value={dlDate} onChange={e=>setDlDate(e.target.value)} style={iS}/></div>}
+                {dlFilter==="sessions"&&<div style={{marginBottom:12,display:"flex",gap:6,flexWrap:"wrap"}}>{[2,3,5,10,20].map(n=><button key={n} onClick={()=>setDlCount(n)} style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${dlCount===n?"rgba(96,165,250,0.6)":"rgba(255,255,255,0.1)"}`,background:dlCount===n?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.04)",color:dlCount===n?"#60a5fa":"#9ca3af",cursor:"pointer",fontSize:12,fontWeight:dlCount===n?700:400}}>{n}</button>)}</div>}
+                {dlFilter==="month"&&<div style={{marginBottom:12}}><select value={dlMonth} onChange={e=>setDlMonth(Number(e.target.value))} style={sS}>{["January","February","March","April","May","June","July","August","September","October","November","December"].map((m,i)=><option key={i} value={i}>{m}</option>)}</select></div>}
+                <div style={{fontSize:11,color:"#4b5563",marginBottom:14,padding:"8px 12px",background:"rgba(255,255,255,0.03)",borderRadius:8}}>{getFiltered().length} session{getFiltered().length!==1?"s":""} in report</div>
+                <button onClick={downloadReport} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1d4ed8,#60a5fa)",color:"#fff",fontWeight:800,cursor:"pointer",fontSize:13,marginBottom:10}}>⬇️ Download Report (.txt)</button>
+                <div><Lbl c="#60a5fa">📧 Email</Lbl><div style={{display:"flex",gap:8}}><input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder="recipient@email.com" style={{...iS,flex:1}} type="email"/><button onClick={()=>{if(!emailTo.trim())return;const text=buildReport(getFiltered());window.location.href=`mailto:${emailTo}?subject=${encodeURIComponent("SHAS FC Report")}&body=${encodeURIComponent(text)}`;}} disabled={!emailTo.trim()} style={{padding:"9px 16px",borderRadius:8,border:"none",background:emailTo.trim()?"linear-gradient(135deg,#065f46,#4ade80)":"rgba(255,255,255,0.06)",color:emailTo.trim()?"#fff":"#4b5563",fontWeight:700,cursor:emailTo.trim()?"pointer":"not-allowed",fontSize:12,whiteSpace:"nowrap"}}>Send ✉️</button></div></div>
+              </div>
+            )}
+
+            {/* Session list */}
+            {(sessionHistory||[]).length===0&&<div style={{textAlign:"center",padding:"40px 0",color:"#374151"}}><div style={{fontSize:32,marginBottom:10}}>📅</div><div>No saved sessions yet</div></div>}
+            {!viewingSession&&[...(sessionHistory||[])].filter(s=>s&&s.id&&(isDev?true:!s.deleted)).reverse().map(s=>{
+              const inc=(s.txns||[]).filter(t=>t).reduce((a,t)=>a+t.amount,0);
+              const tE=(s.trainingExpenses||[]).filter(e=>e).reduce((a,e)=>a+e.amount,0);
+              const dE=(s.donationExpenses||[]).filter(e=>e).reduce((a,e)=>a+e.amount,0);
+              return(
+                <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:12,marginBottom:10,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",cursor:"pointer"}} onClick={()=>setViewingSession(s.id)}>
+                  <div style={{width:42,height:42,borderRadius:10,background:"linear-gradient(135deg,#1e3a5f,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📅</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+                    {s.sessionType}
+                    {isDev&&s.deleted&&<span style={{fontSize:9,background:"rgba(239,68,68,0.2)",color:"#f87171",borderRadius:4,padding:"1px 5px",fontWeight:700}}>DELETED</span>}
+                  </div>
+                    <div style={{fontSize:11,color:"#6b7280"}}>{new Date(s.sessionDate+"T12:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{N(inc-tE)}</div>
+                    <div style={{fontSize:10,color:"#6b7280"}}>{(s.players||[]).length}p · {(s.goals||[]).length}g {dE>0?`· don exp ${N(dE)}`:""}</div>
+                  </div>
+                  <span style={{color:"#374151",fontSize:16}}>›</span>
+                </div>
+              );
+            })}
+
+            {/* Session detail */}
+            {viewingSession&&(()=>{
+              const sIdx=(sessionHistory||[]).findIndex(x=>x&&x.id===viewingSession);
+              const s=(sessionHistory||[])[sIdx];
+              if(!s)return null;
+              const inc=(s.txns||[]).filter(t=>t).reduce((a,t)=>a+t.amount,0);
+              const tE=(s.trainingExpenses||[]).filter(e=>e).reduce((a,e)=>a+e.amount,0);
+              const isEditingThis=editingHistoryId===s.id;
+              return(
+                <div>
+                  <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+                    <button onClick={()=>{setViewingSession(null);setEditingHistoryId(null);}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.05)",color:"#9ca3af",cursor:"pointer",fontSize:12,fontWeight:600}}>← Back</button>
+                    {!isEditingThis&&!s.deleted&&<button onClick={()=>setEditingHistoryId(s.id)} style={{padding:"8px 14px",borderRadius:8,border:"1px solid rgba(251,191,36,0.4)",background:"rgba(251,191,36,0.08)",color:"#fbbf24",cursor:"pointer",fontSize:12,fontWeight:700}}>✏️ Edit</button>}
+                    {isEditingThis&&<button onClick={()=>setEditingHistoryId(null)} style={{padding:"8px 14px",borderRadius:8,border:"1px solid rgba(74,222,128,0.4)",background:"rgba(74,222,128,0.08)",color:"#4ade80",cursor:"pointer",fontSize:12,fontWeight:700}}>✅ Done</button>}
+                    {isDev&&s.deleted&&<button onClick={()=>{if(historyRef.current)historyRef.current.child(String(s.id)).update({deleted:false}).catch(e=>console.error(e));setSessionHistory(h=>h.map(x=>x&&x.id===s.id?{...x,deleted:false}:x));}} style={{padding:"8px 14px",borderRadius:8,border:"1px solid rgba(74,222,128,0.4)",background:"rgba(74,222,128,0.08)",color:"#4ade80",cursor:"pointer",fontSize:12,fontWeight:700}}>♻️ Restore</button>}
+                    <button onClick={()=>{if(window.confirm(isDev?"Permanently wipe this session?":"Delete this session?")){
+                      if(isDev){
+                        // Dev: hard delete from Firebase
+                        if(historyRef.current)historyRef.current.child(String(s.id)).remove().catch(e=>console.error(e));
+                        setSessionHistory(h=>h.filter(x=>x&&x.id!==s.id));
+                      } else {
+                        // Admin: soft delete — marked deleted, hidden from view
+                        if(historyRef.current)historyRef.current.child(String(s.id)).update({deleted:true}).catch(e=>console.error(e));
+                        setSessionHistory(h=>h.filter(x=>x&&x.id!==s.id));
+                      }
+                      setViewingSession(null);setEditingHistoryId(null);
+                    }}} style={{padding:"8px 12px",borderRadius:8,border:"1px solid rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.07)",color:"#f87171",cursor:"pointer",fontSize:12,fontWeight:700}}>🗑 Delete</button>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:14,padding:16,marginBottom:14}}>
+                    {isEditingThis?(
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        <div><Lbl>Type</Lbl><select value={s.sessionType} onChange={e=>setSessionHistory(h=>h.map((x,i)=>i===sIdx?{...x,sessionType:e.target.value}:x))} style={sS}>{SESSION_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+                        <div><Lbl>Date</Lbl><input type="date" value={s.sessionDate} onChange={e=>setSessionHistory(h=>h.map((x,i)=>i===sIdx?{...x,sessionDate:e.target.value}:x))} style={iS}/></div>
+                      </div>
+                    ):(
+                      <div><div style={{fontSize:16,fontWeight:800,marginBottom:4}}>{s.sessionType} — {new Date(s.sessionDate+"T12:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div><div style={{fontSize:11,color:"#4b5563"}}>Saved {new Date(s.savedAt).toLocaleString("en-GB")}</div></div>
+                    )}
+                  </div>
+                  {/* Session summary */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+                    {[
+                      {l:"Players",v:(s.players||[]).length,c:"#60a5fa"},
+                      {l:"Goals",v:(s.goals||[]).length,c:"#4ade80"},
+                      {l:"Income",v:N(inc),c:"#4ade80"},
+                      {l:"Net",v:N(inc-tE),c:inc-tE>=0?"#4ade80":"#f87171"}
+                    ].map(x=>(
+                      <div key={x.l} style={{background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"10px 6px",textAlign:"center",border:"1px solid rgba(255,255,255,0.07)"}}>
+                        <div style={{fontSize:12,fontWeight:800,color:x.c}}>{x.v}</div>
+                        <div style={{fontSize:9,color:"#6b7280",marginTop:2}}>{x.l}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── PAY TAB SNAPSHOT ── */}
+                  {(s.txns||[]).length>0&&(
+                    <div style={{background:"rgba(74,222,128,0.05)",border:"1px solid rgba(74,222,128,0.18)",borderRadius:12,padding:14,marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>💷 Pay Tab — {(s.txns||[]).length} transactions</div>
+                        <div style={{fontSize:13,fontWeight:800,color:"#4ade80"}}>{N(inc)}</div>
+                      </div>
+                      {(()=>{
+                        const byMethod={};
+                        (s.txns||[]).filter(t=>t).forEach(t=>{
+                          const k=t.type==="card_fine"?"Fines":t.type==="late"?"Late":t.method==="cash"?"Cash":"Transfer";
+                          byMethod[k]=(byMethod[k]||0)+(t.amount||0);
+                        });
+                        return Object.keys(byMethod).length>0&&(
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                            {Object.entries(byMethod).map(([k,v])=>(
+                              <div key={k} style={{background:"rgba(255,255,255,0.05)",borderRadius:7,padding:"5px 10px",textAlign:"center"}}>
+                                <div style={{fontSize:11,fontWeight:700,color:"#4ade80"}}>{N(v)}</div>
+                                <div style={{fontSize:9,color:"#6b7280"}}>{k}</div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      {(s.txns||[]).filter(t=>t).map(t=>(
+                        <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderRadius:6,marginBottom:3,background:"rgba(74,222,128,0.04)",border:"1px solid rgba(74,222,128,0.1)",fontSize:12}}>
+                          <span style={{color:"#d1d5db"}}>{t.method==="cash"?"💵":t.method==="transfer"?"🏦":t.type==="card_fine"?"🃏":"⏰"} {t.note}</span>
+                          <span style={{color:"#4ade80",fontWeight:700}}>+{N(t.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── TRAINING EXPENSES SNAPSHOT ── */}
+                  {(s.trainingExpenses||[]).length>0&&(
+                    <div style={{background:"rgba(239,68,68,0.05)",border:"1px solid rgba(239,68,68,0.18)",borderRadius:12,padding:14,marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#f87171"}}>💸 Training Expenses</div>
+                        <div style={{fontSize:13,fontWeight:800,color:"#f87171"}}>{N(tE)}</div>
+                      </div>
+                      {(s.trainingExpenses||[]).filter(e=>e).map(e=>(
+                        <div key={e.id} style={{display:"flex",justifyContent:"space-between",padding:"7px 10px",borderRadius:6,marginBottom:3,background:"rgba(239,68,68,0.04)",border:"1px solid rgba(239,68,68,0.1)",fontSize:12}}>
+                          <span style={{color:"#d1d5db"}}>{e.desc} <span style={{color:"#4b5563"}}>({e.category})</span></span>
+                          <span style={{color:"#f87171",fontWeight:700}}>-{N(e.amount)}</span>
+                        </div>
+                      ))}
+                      <div style={{borderTop:"1px solid rgba(239,68,68,0.15)",paddingTop:8,marginTop:6,display:"flex",justifyContent:"space-between"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"#9ca3af"}}>Session Net</span>
+                        <span style={{fontSize:13,fontWeight:800,color:inc-tE>=0?"#4ade80":"#f87171"}}>{N(inc-tE)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── DONATION EXPENSES SNAPSHOT ── */}
+                  {(s.donationExpenses||[]).length>0&&(
+                    <div style={{background:"rgba(251,191,36,0.05)",border:"1px solid rgba(251,191,36,0.18)",borderRadius:12,padding:14,marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#fbbf24"}}>🤝 Donation Expenses</div>
+                        <div style={{fontSize:13,fontWeight:800,color:"#fbbf24"}}>{N((s.donationExpenses||[]).filter(e=>e).reduce((a,e)=>a+(e.amount||0),0))}</div>
+                      </div>
+                      {(s.donationExpenses||[]).filter(e=>e).map(e=>(
+                        <div key={e.id} style={{display:"flex",justifyContent:"space-between",padding:"7px 10px",borderRadius:6,marginBottom:3,background:"rgba(251,191,36,0.04)",border:"1px solid rgba(251,191,36,0.1)",fontSize:12}}>
+                          <span style={{color:"#d1d5db"}}>{e.desc} <span style={{color:"#4b5563"}}>({e.category})</span></span>
+                          <span style={{color:"#fbbf24",fontWeight:700}}>-{N(e.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:12}}>
+                    <div style={{fontSize:10,color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:6}}>Session Notes</div>
+                    {isEditingThis?<textarea value={s.sessionNote||""} onChange={e=>setSessionHistory(h=>h.map((x,i)=>i===sIdx?{...x,sessionNote:e.target.value}:x))} rows={3} style={{...iS,resize:"vertical",lineHeight:1.6}}/>:<div style={{fontSize:12,color:s.sessionNote?"#9ca3af":"#374151",lineHeight:1.6}}>{s.sessionNote||"No notes"}</div>}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+      </div>
+
+      {/* Footer */}
+      <div style={{textAlign:"center",padding:"22px 16px 30px",borderTop:"1px solid rgba(255,255,255,0.06)",marginTop:10}}>
+        <div style={{fontSize:11,fontWeight:800,color:"#4ade80",marginBottom:4}}>Built by DAAB EDGE INNOVATIONS</div>
+        <a href="mailto:daab.edge@gmail.com" style={{fontSize:11,color:"#6b7280",textDecoration:"none"}}>✉️ daab.edge@gmail.com</a>
+      </div>
+    </div>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(ErrorBoundary,null,React.createElement(App)));
+</script>
+</body>
+</html>
